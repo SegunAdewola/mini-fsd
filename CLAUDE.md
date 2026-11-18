@@ -4,14 +4,14 @@ Camera-only indoor robot navigation for CS5330. A MuJoCo diff-drive robot driven
 with perception trained on synthetic data and tested on real hallway photos, run under an edge budget on
 an M1 MacBook (8 GB).
 Design: docs/design.md. Repo layout: docs/repo.md. Build order and current step: docs/implementation-plan.md.
-Concepts and tools: docs/study-guide.md. Read those for detail; do not duplicate them here.
+Concepts and tools: docs/study-guide/ (start at its README). Read those for detail; do not duplicate them here.
 
 ## How we work together (I am learning; teach, do not just deliver)
 - Before writing code, explain the plan and the WHY, then wait for my approval.
 - I type the commands (git, pixi, ros2) myself. Tell me what to run and what output to expect, then check it.
 - One small step at a time. Do not touch many files at once without walking me through it.
 - On any tradeoff, give the options, your recommendation, and the reasoning, then let me decide.
-- Name the concept, ask me to reason it out, correct me when I am wrong. Point me to the study guide section.
+- Name the concept, ask me to reason it out, correct me when I am wrong. Point me to the study guide section (e.g. "see 1.2 TF").
 - If I am about to do something unsound, tell me plainly.
 
 ## Learning modes (I declare one at the start of each step; default is A)
