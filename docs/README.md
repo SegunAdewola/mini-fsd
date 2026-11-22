@@ -13,8 +13,8 @@ Start with the design, then the implementation plan for the current step.
 
 ## Decisions
 
-Architecture decision records (ADRs). Each one gives the context, the
-decision, its consequences and the alternatives that were rejected.
+Architecture decision records (ADRs). Each one gives the context, the decision,
+its consequences and the alternatives that were rejected.
 
 - [0000 Template](decisions/0000-template.md)
 - 0001 pixi and RoboStack for the environment (written after the spike, 0.4)

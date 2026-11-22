@@ -24,11 +24,10 @@ keep their own licenses.
 - Anyone can read and reuse the code with attribution.
 - Model weights are not committed, which also avoids redistributing gated or
   AGPL weights.
-- **Revisit at M3.** If the final system imports Ultralytics, the AGPL may
-  apply to the combined program. Options then: relicense our code under
-  AGPL-3.0 (easy, since it's a solo project), keep YOLO26 only in the
-  comparison scripts, or export to ONNX and run without Ultralytics at
-  inference time.
+- **Revisit at M3.** If the final system imports Ultralytics, the AGPL may apply
+  to the combined program. Options then: relicense our code under AGPL-3.0
+  (easy, since it's a solo project), keep YOLO26 only in the comparison scripts,
+  or export to ONNX and run without Ultralytics at inference time.
 
 ## Alternatives considered
 

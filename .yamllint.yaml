@@ -1,0 +1,17 @@
+extends: default
+
+rules:
+  line-length:
+    max: 80
+  indentation:
+    spaces: 2
+  document-start: disable   # "---" at the top of every file adds noise
+  truthy:
+    check-keys: false       # GitHub Actions uses the bare key "on"
+
+ignore: |
+  .pixi/
+  .vale/
+  ros2_ws/build/
+  ros2_ws/install/
+  ros2_ws/log/

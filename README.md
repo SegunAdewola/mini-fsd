@@ -6,8 +6,8 @@ camera to see obstacles, and checks the door sign when it arrives. Perception is
 trained mostly on synthetic data and tested on real indoor photos. Everything
 runs within an edge compute budget on an Apple M1 laptop with 8 GB of RAM.
 
-A CS5330 (Pattern Recognition and Computer Vision) final project at
-Northeastern University, inspired by Tesla's camera-only FSD.
+A CS5330 (Pattern Recognition and Computer Vision) final project at Northeastern
+University, inspired by Tesla's camera-only FSD.
 
 ## Status
 

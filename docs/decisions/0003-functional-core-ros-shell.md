@@ -8,9 +8,9 @@
 
 The same logic is needed in four places: the ROS nodes on the M1, the data
 engine that renders training frames, the training and eval scripts on Explorer
-and Colab, and the Dec 15 demo script, which must run without ROS. ROS nodes
-are slow to test: they need a ROS environment, an executor, and topics.
-Explorer and Colab have no ROS at all.
+and Colab, and the Dec 15 demo script, which must run without ROS. ROS nodes are
+slow to test: they need a ROS environment, an executor, and topics. Explorer and
+Colab have no ROS at all.
 
 ## Decision
 
@@ -37,6 +37,5 @@ algorithms. This pattern is often called "functional core, imperative shell".
 
 - **Logic inside each ROS package.** The usual ROS layout. Tests need ROS, and
   the code can't be reused on Explorer or in the demo without copying.
-- **Several small packages** (one per area). More packaging overhead for a
-  solo, five-week project. Subpackages inside `minifsd` give the same
-  separation.
+- **Several small packages** (one per area). More packaging overhead for a solo,
+  five-week project. Subpackages inside `minifsd` give the same separation.

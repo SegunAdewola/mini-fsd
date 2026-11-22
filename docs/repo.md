@@ -45,7 +45,7 @@ mini-fsd/
 ├── .github/                     # CI workflow and PR template
 ├── pixi.toml / pixi.lock        # Environment (ADR 0001); lock is generated
 ├── pyproject.toml               # minifsd package + ruff/mypy/pytest config
-├── CLAUDE.md                    # How to work in this repo (humans and agents)
+├── CLAUDE.md, .claude/          # Local agent config (gitignored, private)
 ├── data/                        # Datasets and renders (gitignored)
 ├── papers/                      # Paper PDFs (gitignored)
 └── private/                     # Campus floor plans, digital twin (gitignored)
@@ -53,8 +53,8 @@ mini-fsd/
 
 ## Rules of thumb
 
-- New logic goes in `src/minifsd` with a test in `tests/`. A ROS node only
-  wraps it.
+- New logic goes in `src/minifsd` with a test in `tests/`. A ROS node only wraps
+  it.
 - `minifsd` never imports ROS.
 - Anything large (datasets, renders, checkpoints, videos) goes in `data/` or
   `runs/`, which git ignores. Pre-commit blocks files over 1 MB.

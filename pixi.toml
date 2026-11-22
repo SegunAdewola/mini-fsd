@@ -1,0 +1,86 @@
+# Project environments. `pixi install` builds them into .pixi/ from pixi.lock.
+# Specs here are loose on purpose; pixi.lock pins every exact version.
+#
+# Two environments:
+#   default  ROS 2, MuJoCo, tests, plus the lint tools.
+#   lint     Only the lint/format tools. Small and quick to install, so the
+#            git hooks and the CI lint job don't need the ROS install.
+
+[workspace]
+name = "mini-fsd"
+description = "Camera-only indoor robot navigation (CS5330 final project)"
+authors = ["Oluwasegun Adewola"]
+license = "Apache-2.0"
+channels = ["robostack-jazzy", "conda-forge"]
+# RoboStack's current builds need macOS 14+. Without the macos floor, pixi
+# assumes macOS 13 and quietly picks older builds.
+platforms = [{ name = "osx-arm64-14", platform = "osx-arm64", macos = "14.0" }]
+
+# Cyclone DDS is more reliable than the default Fast DDS on macOS.
+# LOCALHOST keeps ROS traffic on this machine (no firewall prompts, no
+# talking to other robots on campus Wi-Fi).
+[activation.env]
+RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
+ROS_AUTOMATIC_DISCOVERY_RANGE = "LOCALHOST"
+
+[dependencies]
+python = "3.12.*"
+
+# ROS 2 Jazzy (RoboStack builds of the official packages)
+ros-jazzy-desktop = "*"                # rclpy, rviz2, tf2, demo nodes, rqt
+ros-jazzy-navigation2 = "*"            # Nav2 servers, Smac planner, MPPI controller
+ros-jazzy-nav2-bringup = "*"           # Nav2 launch files and default params
+ros-jazzy-teleop-twist-keyboard = "*"  # drive /cmd_vel from the keyboard
+ros-jazzy-foxglove-bridge = "*"        # optional web/desktop viewer
+ros-jazzy-rmw-cyclonedds-cpp = "*"     # DDS transport (see activation.env)
+
+# Building ROS packages
+colcon-common-extensions = "*"
+compilers = "*"
+cmake = "*"
+pkg-config = "*"
+make = "*"
+ninja = "*"
+
+# Python libs and test tools
+numpy = "*"
+pytest = "*"
+hypothesis = "*"
+mypy = "*"
+
+[pypi-dependencies]
+mujoco = ">=4.0.1,<5"   # 4.0.0 has a solver bug (wrong accelerations)
+
+[tasks]
+test = "pytest"
+typecheck = "mypy"
+build = { cmd = "colcon build --symlink-install", cwd = "ros2_ws" }
+# Works once the bringup package exists (step R6).
+sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
+teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
+
+# Lint and format tools (ADR 0005).
+[feature.lint.dependencies]
+python = "3.12.*"
+pre-commit = "*"
+ruff = "*"                # Python lint + format
+mdformat = "*"            # Markdown format (wrap at 80)
+mdformat-gfm = "*"        # GitHub tables, task lists, autolinks
+mdformat-tables = "*"
+mdformat-frontmatter = "*" # keep the YAML header in skill files intact
+markdownlint-cli2 = "*"   # Markdown lint
+vale = "*"                # prose lint, Google developer docs style
+shellcheck = "*"          # shell lint
+go-shfmt = "*"            # shell format
+yamllint = "*"
+actionlint = "*"          # GitHub Actions workflows
+
+[feature.lint.tasks]
+lint = "pre-commit run --all-files"
+fmt = "ruff format . && ruff check --fix . && git ls-files -z '*.md' | xargs -0 mdformat"
+lint-docs = "vale docs README.md"
+vale-sync = "vale sync"
+
+[environments]
+default = ["lint"]
+lint = { features = ["lint"], no-default-feature = true }

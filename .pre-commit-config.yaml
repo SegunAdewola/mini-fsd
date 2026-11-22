@@ -1,0 +1,73 @@
+# Runs on every `git commit`. Install once with: pixi run pre-commit install
+# Tools run through pixi so the hook uses the exact versions in pixi.lock.
+# Formatters (ruff format, mdformat, shfmt) rewrite files; if a hook changes
+# something, review it, `git add` again and recommit.
+exclude: ^(docs/proposal/|papers/|data/|private/)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: local
+    hooks:
+      # Python (Google Python Style Guide)
+      - id: ruff-format
+        name: ruff format
+        entry: pixi run -e lint ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-check
+        name: ruff check
+        entry: pixi run -e lint ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: pixi run typecheck
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # Markdown (Google Markdown style guide)
+      - id: mdformat
+        name: mdformat
+        entry: pixi run -e lint mdformat
+        language: system
+        types: [markdown]
+      - id: markdownlint
+        name: markdownlint
+        entry: pixi run -e lint markdownlint-cli2
+        language: system
+        types: [markdown]
+
+      # Shell (Google Shell Style Guide)
+      - id: shfmt
+        name: shfmt
+        entry: pixi run -e lint shfmt -w -i 2 -ci
+        language: system
+        types: [shell]
+      - id: shellcheck
+        name: shellcheck
+        entry: pixi run -e lint shellcheck
+        language: system
+        types: [shell]
+
+      # YAML and GitHub Actions
+      - id: yamllint
+        name: yamllint
+        entry: pixi run -e lint yamllint --strict
+        language: system
+        types: [yaml]
+      - id: actionlint
+        name: actionlint
+        entry: pixi run -e lint actionlint
+        language: system
+        files: ^\.github/workflows/

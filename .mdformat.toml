@@ -1,0 +1,3 @@
+# Markdown formatter settings (Google Markdown style: wrap prose at 80).
+wrap = 80
+end_of_line = "lf"

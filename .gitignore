@@ -29,8 +29,11 @@ media/
 # Campus floor plans and digital twin geometry (not public without the campus's OK)
 private/
 
-# Local Claude settings and OS junk
-.claude/settings.local.json
+# Agent config (CLAUDE.md, skills, hooks): kept local and private
+CLAUDE.md
+.claude/
+
+# OS junk
 .DS_Store
 
 # Paper PDFs (see docs/papers.md) and downloaded Vale style packages

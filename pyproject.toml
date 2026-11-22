@@ -1,0 +1,36 @@
+# Tool config only. Packages are built by colcon from each package's setup.py.
+# Style follows the Google Python Style Guide:
+# https://google.github.io/styleguide/pyguide.html
+
+[tool.ruff]
+line-length = 80
+target-version = "py312"
+extend-exclude = ["docs/proposal", "ros2_ws/build", "ros2_ws/install", "ros2_ws/log"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import sorting, N naming, D docstrings,
+# UP modern syntax, B likely bugs, SIM simplifications.
+select = ["E", "F", "W", "I", "N", "D", "UP", "B", "SIM"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names say what they check; package metadata and launch files need no docstrings.
+"**/test/**" = ["D"]
+"**/setup.py" = ["D"]
+"**/launch/*.py" = ["D"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["ros2_ws/src"]
+exclude = ["/setup\\.py$", "/launch/"]
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+# rclpy and mujoco ship without complete type stubs.
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["ros2_ws/src"]
+addopts = "-ra"

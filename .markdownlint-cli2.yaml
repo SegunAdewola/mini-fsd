@@ -1,0 +1,30 @@
+# Markdown lint rules, aligned with the Google Markdown style guide:
+# https://google.github.io/styleguide/docguide/style.html
+config:
+  default: true
+  MD003: {style: atx}  # "# Heading", not underlined headings
+  MD004: {style: dash}  # "-" bullets everywhere
+  MD007: {indent: 2}
+  MD013:  # 80-column prose; tables, code blocks, headings exempt
+    line_length: 80
+    tables: false
+    code_blocks: false
+    headings: false
+  MD024: {siblings_only: true}  # repeated "Big picture" headings are fine
+  MD029: {style: one_or_ordered}  # lazy "1." numbering or 1, 2, 3
+  MD046: {style: fenced}
+  MD048: {style: backtick}
+
+# Files checked when run by hand; the git hook passes its own file list.
+globs:
+  - "**/*.md"
+
+ignores:
+  - ".pixi/**"
+  - "papers/**"
+  - "data/**"
+  - "private/**"
+  - "ros2_ws/build/**"
+  - "ros2_ws/install/**"
+  - "ros2_ws/log/**"
+  - "docs/proposal/**"
