@@ -14,7 +14,7 @@ Concepts and tools: docs/study-guide/ (start at its README). Read those for deta
 - Name the concept, ask me to reason it out, correct me when I am wrong. Point me to the study guide section (e.g. "see 1.2 TF").
 - If I am about to do something unsound, tell me plainly.
 
-## Learning modes (I declare one at the start of each step; default is A)
+## Learning modes (I declare one at the start of each step; default is B for core logic, C for boilerplate)
 - Mode A (I write, you coach): you explain the concept, we agree the interface and tests, you write the
   failing test and STOP. I write the implementation. You review it, say what is good, and point at what is
   wrong WITHOUT fixing it, so I correct it myself.
@@ -25,7 +25,11 @@ Concepts and tools: docs/study-guide/ (start at its README). Read those for deta
 
 ## Non-negotiables
 - TDD: no production code without a failing test first. See skill: tdd.
-- Google Python Style Guide. ruff and mypy are the authority on style; run them, do not argue with them.
+- Google style guides for every language and for docs (ADR 0005). The linters are the authority; run them,
+  do not argue with them. Rules no tool checks (e.g. "import modules, not names") are checked in review.
+- All ROS-free logic lives in src/minifsd and never imports ROS (ADR 0003). ROS nodes only wrap it.
+- Property-based tests (Hypothesis) wherever a rule is easier to state than a list of examples.
+- Any design choice someone might question gets an ADR in docs/decisions/ (template: 0000).
 - Small atomic commits, Conventional Commits, one logical change each. See skill: commit.
 - One commit maps to one step in docs/implementation-plan.md. If reality diverges from the plan, STOP and
   update the plan first (see its "When surprises happen" section).
@@ -38,6 +42,7 @@ Concepts and tools: docs/study-guide/ (start at its README). Read those for deta
 ## Commands (run from the repo root)
 - Environment: `pixi install`, then `pixi shell` (or prefix any command with `pixi run`)
 - Tests: `pixi run test`   |   Lint: `pixi run lint`   |   Format: `pixi run fmt`   |   Types: `pixi run typecheck`
+- Lint without the ROS env: `pixi run -e lint lint`   |   Prose (warnings): `pixi run -e lint lint-docs`
 - Build ROS packages: `pixi run build`   |   Sim + RViz: `pixi run sim`
 - Teleop (separate terminal): `pixi run teleop`
 

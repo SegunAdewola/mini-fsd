@@ -32,3 +32,7 @@ private/
 # Local Claude settings and OS junk
 .claude/settings.local.json
 .DS_Store
+
+# Paper PDFs (see docs/papers.md) and downloaded Vale style packages
+papers/
+.vale/styles/
