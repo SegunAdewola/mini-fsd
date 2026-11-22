@@ -98,15 +98,15 @@ better approach appears, a library misbehaves):
   install, because pixi environments store absolute paths. To move it later,
   clone fresh and run `pixi install` there. Test: `git remote -v` shows the
   repo; README renders on GitHub.
-- [ ] 0.3 `[infra]` chore: Google style toolchain (ruff, mypy, mdformat,
+- [x] 0.3 `[infra]` chore: Google style toolchain (ruff, mypy, mdformat,
   markdownlint, Vale, shellcheck, shfmt, yamllint, actionlint), pixi lint
   environment and tasks, one-time markdown reflow, README, LICENSE, PR template.
   Test: `pixi run -e lint lint` clean.
-- [ ] 0.4 `[infra]` build: pixi env and `pixi.lock`; spike checks. Test:
-  talker/listener talk; `rviz2` opens; Nav2 `map_server` serves a test map;
-  MuJoCo renders offscreen inside the env. Write ADR 0001 with measured install
-  time, env size and versions.
-- [ ] 0.5 `[infra]` build: `src/minifsd` package (hatchling, editable install
+- [x] 0.4 `[infra]` build: pixi env and `pixi.lock`; spike checks. Test:
+  talker/listener talk; `rviz2` opens; Nav2 is installed; MuJoCo renders
+  offscreen inside the env. Write ADR 0001 with measured env size and versions.
+  (The `map_server` check moved to R8, which serves the real map.)
+- [x] 0.5 `[infra]` build: `src/minifsd` package (hatchling, editable install
   through pixi), `tests/`, Hypothesis. Test: `pixi run test` passes a smoke test
   that imports `minifsd`.
 - [ ] 0.6 `[infra]` ci: GitHub Actions lint and test jobs, branch protection on
@@ -119,7 +119,7 @@ end. Big integration problems show up now, not in December.
 
 ### CV track
 
-- [ ] V1 `[CV]` feat(eval): `minifsd.eval.metrics` with `floor_iou`, `abs_rel`
+- [x] V1 `[CV]` feat(eval): `minifsd.eval.metrics` with `floor_iou`, `abs_rel`
   and `delta1`. Test: hand-computed cases, plus properties: IoU is in [0, 1],
   symmetric, and 1 for identical masks; `abs_rel(x, x) == 0`;
   `delta1(x, x) == 1`; both depth metrics ignore invalid (zero or non-finite)
@@ -264,3 +264,6 @@ Add a row at the end of each session.
   ROS-free logic in `src/minifsd` (ADR 0003). Google style toolchain (ADR 0005).
   Public repo under Apache-2.0 (ADR 0006). CV work uses NYUv2 and synthetic data
   until real photos are possible.
+- **2026-11-22** Spike passed; ADR 0001 records pixi + RoboStack with measured
+  numbers (6.4 GB env, 2 ms offscreen render). The `map_server` spike check
+  moved from 0.4 to R8, where the real map is served anyway.

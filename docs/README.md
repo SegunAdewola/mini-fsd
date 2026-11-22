@@ -17,7 +17,7 @@ Architecture decision records (ADRs). Each one gives the context, the decision,
 its consequences and the alternatives that were rejected.
 
 - [0000 Template](decisions/0000-template.md)
-- 0001 pixi and RoboStack for the environment (written after the spike, 0.4)
+- [0001 Install ROS 2, MuJoCo and tools with pixi and RoboStack](decisions/0001-pixi-robostack-environment.md)
 - 0002 Planar robot base with unicycle commands (written at R2)
 - [0003 Keep all ROS-free logic in one Python package](decisions/0003-functional-core-ros-shell.md)
 - [0004 Use the simulator's true pose instead of localization](decisions/0004-ground-truth-pose.md)

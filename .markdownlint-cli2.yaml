@@ -21,6 +21,7 @@ globs:
 
 ignores:
   - ".pixi/**"
+  - ".*_cache/**"  # pytest, mypy, ruff write their own README.md
   - "papers/**"
   - "data/**"
   - "private/**"
