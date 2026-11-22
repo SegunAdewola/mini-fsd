@@ -13,7 +13,7 @@ authors = ["Oluwasegun Adewola"]
 license = "Apache-2.0"
 channels = ["robostack-jazzy", "conda-forge"]
 # RoboStack's current builds need macOS 14+. Without the macos floor, pixi
-# assumes macOS 13 and quietly picks older builds.
+# assumes macOS 13 and picks older builds.
 platforms = [{ name = "osx-arm64-14", platform = "osx-arm64", macos = "14.0" }]
 
 # Cyclone DDS is more reliable than the default Fast DDS on macOS.
@@ -50,6 +50,7 @@ mypy = "*"
 
 [pypi-dependencies]
 mujoco = ">=4.0.1,<5"   # 4.0.0 has a solver bug (wrong accelerations)
+minifsd = { path = ".", editable = true }   # our package (ADR 0003)
 
 [tasks]
 test = "pytest"

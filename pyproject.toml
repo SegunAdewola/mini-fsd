@@ -1,11 +1,36 @@
-# Tool config only. Packages are built by colcon from each package's setup.py.
+# The minifsd package (all ROS-free logic, ADR 0003) and tool config.
+# ROS packages in ros2_ws/src are built separately by colcon.
 # Style follows the Google Python Style Guide:
 # https://google.github.io/styleguide/pyguide.html
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minifsd"
+version = "0.1.0"
+description = "Mini FSD core: world, geometry, perception, eval, data"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Oluwasegun Adewola" }]
+requires-python = ">=3.12"
+# Runtime dependencies are pinned in pixi.toml; listed here so a plain
+# `pip install .` on Explorer or Colab also works.
+dependencies = ["numpy"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minifsd"]
 
 [tool.ruff]
 line-length = 80
 target-version = "py312"
-extend-exclude = ["docs/proposal", "ros2_ws/build", "ros2_ws/install", "ros2_ws/log"]
+extend-exclude = [
+    "docs/proposal",
+    "ros2_ws/build",
+    "ros2_ws/install",
+    "ros2_ws/log",
+]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I import sorting, N naming, D docstrings,
@@ -16,14 +41,16 @@ select = ["E", "F", "W", "I", "N", "D", "UP", "B", "SIM"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-# Test names say what they check; package metadata and launch files need no docstrings.
+# Test names say what they check; package metadata and launch files need
+# no docstrings.
+"tests/**" = ["D"]
 "**/test/**" = ["D"]
 "**/setup.py" = ["D"]
 "**/launch/*.py" = ["D"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["ros2_ws/src"]
+files = ["src", "tests"]
 exclude = ["/setup\\.py$", "/launch/"]
 disallow_untyped_defs = true
 warn_unused_ignores = true
@@ -32,5 +59,10 @@ warn_return_any = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["ros2_ws/src"]
-addopts = "-ra"
+testpaths = ["tests"]
+# importlib mode lets test files share names across folders (tests/eval,
+# tests/world, ...) without __init__.py files.
+addopts = "-ra --import-mode=importlib"
+# ROS's pytest plugins import lark, which uses a deprecated stdlib module.
+# Not our code; silence only that source so our own warnings stay visible.
+filterwarnings = ["ignore::DeprecationWarning:lark.*"]
