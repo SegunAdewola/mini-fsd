@@ -126,14 +126,15 @@ end. Big integration problems show up now, not in December.
   symmetric, and 1 for identical masks; `abs_rel(x, x) == 0`;
   `delta1(x, x) == 1`; both depth metrics ignore invalid (zero or non-finite)
   ground truth.
-- [ ] V2 `[CV]` feat(data): `minifsd.data.nyuv2` loader for the NYU Depth V2
+- [x] V2 `[CV]` feat(data): `minifsd.data.nyuv2` loader for the NYU Depth V2
   labeled set (images, depth, floor mask from the class named "floor", looked up
   in the file) with the official 795/654 split. Test: a tiny synthetic `.mat`
   fixture with known values; shapes, dtypes and the floor mask match.
 - [ ] V3 `[CV]` feat(perception): `minifsd.perception.floor_classical`, region
   growing from a bottom-center seed with an edge stop. Test: a synthetic image
-  with a known floor region gives IoU above 0.95; the seed pixel is always in
-  the mask (property). Report floor IoU on NYUv2 test.
+  with a known floor region gives IoU above 0.95; the mask is empty or contains
+  the seed (property); nothing above the horizon (property). Tune on NYUv2
+  train, report floor IoU on NYUv2 test once.
 - [ ] V4 `[CV]` feat(geometry): `minifsd.geometry.camera` pinhole model,
   checkerboard calibration (OpenCV) and the ground-plane mapping from pixel to
   floor metres. Test: calibration on OpenCV's sample chessboard images converges
@@ -301,3 +302,8 @@ Add a row at the end of each session.
   layout). Claims are limited to unseen floors of a known building; NYUv2 test
   covers unseen buildings. R1 renamed from "building" to "floor plan", since it
   makes one floor and "floor" alone already means the floor mask.
+- **2026-11-22** V3 evaluates NYUv2 on the Eigen crop (rows 45 to 470, cols 41
+  to 600); without it the seed lands on the white border and IoU is 0.01. Only
+  about 40% of NYUv2 images have floor at the bottom centre, so the baseline
+  reports IoU on all images and on that subset. Settings tuned on train
+  (tolerance 2, Canny 80/200, train IoU 0.278).
