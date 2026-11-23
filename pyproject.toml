@@ -69,3 +69,6 @@ addopts = "-ra --import-mode=importlib"
 # ROS's pytest plugins import lark, which uses a deprecated stdlib module.
 # Not our code; silence only that source so our own warnings stay visible.
 filterwarnings = ["ignore::DeprecationWarning:lark.*"]
+# Tests that render with OpenGL. GitHub's macOS runners have no GPU, so CI
+# deselects them with -m "not gl"; run them locally before each commit.
+markers = ["gl: needs an OpenGL context (a GPU) to render"]

@@ -48,4 +48,5 @@ jobs:
       - name: Type check
         run: pixi run -e core typecheck
       - name: Unit and property tests
-        run: pixi run -e core test
+        # The runner has no GPU, so MuJoCo can't render: skip the gl tests.
+        run: pixi run -e core test -m "not gl"

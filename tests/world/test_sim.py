@@ -103,6 +103,7 @@ def test_walls_block_it(s: sim.Sim) -> None:
     assert s.pose().x < PLAN.length - mjcf.ROBOT_RADIUS + 0.02
 
 
+@pytest.mark.gl
 def test_rgb_image_shape(s: sim.Sim) -> None:
     rgb = s.render_rgb()
     assert rgb.shape == (mjcf.IMAGE_HEIGHT, mjcf.IMAGE_WIDTH, 3)
@@ -110,6 +111,7 @@ def test_rgb_image_shape(s: sim.Sim) -> None:
     assert rgb.std() > 0  # not a blank image
 
 
+@pytest.mark.gl
 def test_depth_to_the_end_wall(s: sim.Sim) -> None:
     depth = s.render_depth()
     assert depth.shape == (mjcf.IMAGE_HEIGHT, mjcf.IMAGE_WIDTH)
