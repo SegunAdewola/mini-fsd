@@ -1,8 +1,10 @@
 # Project environments. `pixi install` builds them into .pixi/ from pixi.lock.
 # Specs here are loose on purpose; pixi.lock pins every exact version.
 #
-# Two environments:
-#   default  ROS 2, MuJoCo, tests, plus the lint tools.
+# Three environments:
+#   default  ROS 2 plus everything below. What you use day to day.
+#   core     The minifsd package and its tests, without ROS (ADR 0003). CI
+#            tests here, so a ROS import in src/minifsd fails the build.
 #   lint     Only the lint/format tools. Small and quick to install, so the
 #            git hooks and the CI lint job don't need the ROS install.
 
@@ -42,23 +44,27 @@ pkg-config = "*"
 make = "*"
 ninja = "*"
 
-# Python libs and test tools
+[tasks]
+build = { cmd = "colcon build --symlink-install", cwd = "ros2_ws" }
+# Works once the bringup package exists (step R6).
+sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
+teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
+
+# The ROS-free core: our package, its libraries and test tools (ADR 0003).
+[feature.core.dependencies]
+python = "3.12.*"
 numpy = "*"
 pytest = "*"
 hypothesis = "*"
 mypy = "*"
 
-[pypi-dependencies]
+[feature.core.pypi-dependencies]
 mujoco = ">=4.0.1,<5"   # 4.0.0 has a solver bug (wrong accelerations)
 minifsd = { path = ".", editable = true }   # our package (ADR 0003)
 
-[tasks]
+[feature.core.tasks]
 test = "pytest"
 typecheck = "mypy"
-build = { cmd = "colcon build --symlink-install", cwd = "ros2_ws" }
-# Works once the bringup package exists (step R6).
-sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
-teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
 
 # Lint and format tools (ADR 0005).
 [feature.lint.dependencies]
@@ -83,5 +89,6 @@ lint-docs = "vale docs README.md"
 vale-sync = "vale sync"
 
 [environments]
-default = ["lint"]
+default = ["core", "lint"]
+core = { features = ["core"], no-default-feature = true }
 lint = { features = ["lint"], no-default-feature = true }

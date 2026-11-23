@@ -31,7 +31,8 @@ repos:
         types_or: [python, pyi]
       - id: mypy
         name: mypy
-        entry: pixi run typecheck
+        # core env: mypy needs numpy and minifsd, not ROS.
+        entry: pixi run -e core typecheck
         language: system
         types: [python]
         pass_filenames: false

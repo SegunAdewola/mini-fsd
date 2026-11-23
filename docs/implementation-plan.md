@@ -109,8 +109,10 @@ better approach appears, a library misbehaves):
 - [x] 0.5 `[infra]` build: `src/minifsd` package (hatchling, editable install
   through pixi), `tests/`, Hypothesis. Test: `pixi run test` passes a smoke test
   that imports `minifsd`.
-- [ ] 0.6 `[infra]` ci: GitHub Actions lint and test jobs, branch protection on
-  `main`. Test: `actionlint` passes; the first PR goes green.
+- [ ] 0.6 `[infra]` ci: GitHub Actions lint and test jobs on `macos-14`. Tests
+  run in a ROS-free pixi `core` environment, so a ROS import in `src/minifsd`
+  fails CI. No branch protection (solo project, direct pushes to `main`). Test:
+  `actionlint` passes; the first push goes green.
 
 ## M1 Walking skeleton
 
@@ -267,3 +269,8 @@ Add a row at the end of each session.
 - **2026-11-22** Spike passed; ADR 0001 records pixi + RoboStack with measured
   numbers (6.4 GB env, 2 ms offscreen render). The `map_server` spike check
   moved from 0.4 to R8, where the real map is served anyway.
+- **2026-11-22** CI tests in a ROS-free `core` env; branch protection dropped to
+  save time. Real photos: one building with three floors (floor 1 for
+  validation, floors 2 and 3 for test), not the 2 to 3 extra buildings in the
+  proposal. Claims are limited to unseen floors of a known building; NYUv2 test
+  covers unseen buildings.
