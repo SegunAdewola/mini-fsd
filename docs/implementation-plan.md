@@ -109,7 +109,7 @@ better approach appears, a library misbehaves):
 - [x] 0.5 `[infra]` build: `src/minifsd` package (hatchling, editable install
   through pixi), `tests/`, Hypothesis. Test: `pixi run test` passes a smoke test
   that imports `minifsd`.
-- [ ] 0.6 `[infra]` ci: GitHub Actions lint and test jobs on `macos-26`. Tests
+- [x] 0.6 `[infra]` ci: GitHub Actions lint and test jobs on `macos-26`. Tests
   run in a ROS-free pixi `core` environment, so a ROS import in `src/minifsd`
   fails CI. No branch protection (solo project, direct pushes to `main`). Test:
   `actionlint` passes; the first push goes green.
@@ -150,7 +150,7 @@ end. Big integration problems show up now, not in December.
   cap. Test: a fake candidate with known output and a fixed sleep gives the
   expected metric and a latency within tolerance.
 - [ ] V7 `[CV]` feat(data): `minifsd.data.datagen` renders RGB, floor mask and
-  depth from the sim (needs R3), split by building seed. Test: no seed in two
+  depth from the sim (needs R3), split by floor-plan seed. Test: no seed in two
   splits (property); mask and depth line up with the RGB frame.
 - [ ] V8 `[CV]` feat(demo): `minifsd.demo` CLI, folder of images in, overlay
   images out (classical floor baseline for now). Test: two input images give two
@@ -158,8 +158,8 @@ end. Big integration problems show up now, not in December.
 
 ### Robot track
 
-- [ ] R1 `[R]` feat(world): `minifsd.world.building.generate_building`, a seeded
-  hallway with numbered rooms. Test (properties over seeds): room numbers
+- [ ] R1 `[R]` feat(world): `minifsd.world.floor_plan.generate_floor_plan`, a
+  seeded hallway with numbered rooms. Test (properties over seeds): room numbers
   unique; door gaps open; hallway closed elsewhere; spawn clear of walls; same
   seed gives the same layout; `rooms_per_side=0` raises `ValueError`.
 - [ ] R2 `[R]` feat(world): `minifsd.world.mjcf.build_mjcf`, a planar base (ADR
