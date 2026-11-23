@@ -54,6 +54,8 @@ teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
 [feature.core.dependencies]
 python = "3.12.*"
 numpy = "*"
+h5py = "*"    # reads MATLAB v7.3 (HDF5) files: NYUv2 (V2)
+scipy = "*"   # reads older MATLAB files: the NYUv2 split
 pytest = "*"
 hypothesis = "*"
 mypy = "*"

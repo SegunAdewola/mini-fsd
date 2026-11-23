@@ -17,7 +17,7 @@ authors = [{ name = "Oluwasegun Adewola" }]
 requires-python = ">=3.12"
 # Runtime dependencies are pinned in pixi.toml; listed here so a plain
 # `pip install .` on Explorer or Colab also works.
-dependencies = ["numpy"]
+dependencies = ["numpy", "h5py", "scipy"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/minifsd"]
