@@ -127,9 +127,9 @@ end. Big integration problems show up now, not in December.
   `delta1(x, x) == 1`; both depth metrics ignore invalid (zero or non-finite)
   ground truth.
 - [ ] V2 `[CV]` feat(data): `minifsd.data.nyuv2` loader for the NYU Depth V2
-  labeled set (images, depth, floor mask from class 11) with the official
-  795/654 split. Test: a tiny synthetic `.mat` fixture with known values;
-  shapes, dtypes and the floor mask match.
+  labeled set (images, depth, floor mask from the class named "floor", looked up
+  in the file) with the official 795/654 split. Test: a tiny synthetic `.mat`
+  fixture with known values; shapes, dtypes and the floor mask match.
 - [ ] V3 `[CV]` feat(perception): `minifsd.perception.floor_classical`, region
   growing from a bottom-center seed with an edge stop. Test: a synthetic image
   with a known floor region gives IoU above 0.95; the seed pixel is always in
