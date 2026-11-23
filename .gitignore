@@ -6,6 +6,9 @@ ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
 
+# MuJoCo writes its warnings here
+MUJOCO_LOG.TXT
+
 # Python caches
 __pycache__/
 *.egg-info/

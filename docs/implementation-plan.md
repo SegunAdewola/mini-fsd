@@ -163,15 +163,15 @@ end. Big integration problems show up now, not in December.
   seeded hallway with numbered rooms. Test (properties over seeds): room numbers
   unique; door gaps open; hallway closed elsewhere; spawn clear of walls; same
   seed gives the same layout; `rooms_per_side=0` raises `ValueError`.
-- [ ] R2 `[R]` feat(world): `minifsd.world.mjcf.build_mjcf`, a planar base (ADR
+- [x] R2 `[R]` feat(world): `minifsd.world.mjcf.build_mjcf`, a planar base (ADR
   0002\) with a front camera. Test: compiles; named joints, actuators and camera
   exist; the camera looks along +x at 0.5 m; one sign plate per room.
-- [ ] R3 `[R]` feat(world): `minifsd.world.sim.Sim` with unicycle drive, command
+- [x] R3 `[R]` feat(world): `minifsd.world.sim.Sim` with unicycle drive, command
   watchdog, clamping and RGB plus depth rendering. Test: drives 0.5 m in 1 s;
   turns 1 rad in 1 s; stops within 0.5 s of the last command; clamps at 3 m/s;
   walls block it; depth to the end wall is right within 5 cm; `body_to_world`
   keeps speed (property).
-- [ ] R4 `[R]` feat(geometry): `minifsd.geometry.frames`, quaternions, the
+- [x] R4 `[R]` feat(geometry): `minifsd.geometry.frames`, quaternions, the
   optical frame rotation and camera intrinsics from field of view. Test: optical
   axes map to base axes; fy for 240 px at 50 degrees; quaternions stay unit
   length and yaw round-trips (property).
@@ -275,6 +275,11 @@ Not decided yet. Each has the step where it must be settled.
 - **Floor-plan scale** (M2). Assumed elevator door 1.1 m; confirm one real
   measurement on campus and rescale if needed.
 
+- **Render tests on a Linux runner** (M2). GitHub's macOS runners have no GPU,
+  so CI deselects the `gl` tests. Add a `linux-64` platform and run them there
+  with software rendering (EGL or OSMesa) before the data engine depends on
+  rendering.
+
 ## Hours log
 
 Add a row at the end of each session.
@@ -310,3 +315,7 @@ Add a row at the end of each session.
 - **2026-11-23** V3 result, NYUv2 test (654 images, run once): floor IoU 0.236
   overall, 0.440 on the 266 images with floor at the bottom centre; 1.5 ms p50
   on the M1. The worst images are all cases where the seed missed the floor.
+- **2026-11-23** R3 render tests fail on CI (`CGLError: invalid pixel format`):
+  the macOS runners are VMs with no GPU. Render tests carry a `gl` marker that
+  CI deselects; they run locally before each commit. Linux render CI is a
+  follow-up.
