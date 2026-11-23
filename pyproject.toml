@@ -16,7 +16,10 @@ license = "Apache-2.0"
 authors = [{ name = "Oluwasegun Adewola" }]
 requires-python = ">=3.12"
 # Runtime dependencies are pinned in pixi.toml; listed here so a plain
-# `pip install .` on Explorer or Colab also works.
+# `pip install .` on Explorer or Colab also works. OpenCV is left out on
+# purpose: pixi installs it from conda, and listing the PyPI package here would
+# put a second copy next to it. On Colab it is preinstalled; on Explorer run
+# `pip install opencv-python-headless`.
 dependencies = ["numpy", "h5py", "scipy"]
 
 [tool.hatch.build.targets.wheel]

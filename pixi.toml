@@ -56,6 +56,7 @@ python = "3.12.*"
 numpy = "*"
 h5py = "*"    # reads MATLAB v7.3 (HDF5) files: NYUv2 (V2)
 scipy = "*"   # reads older MATLAB files: the NYUv2 split
+py-opencv = "*"   # classical CV and calibration (V3, V4); ROS uses it too
 pytest = "*"
 hypothesis = "*"
 mypy = "*"

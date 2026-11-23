@@ -27,6 +27,13 @@ import scipy.io
 FLOOR_CLASS_NAME = "floor"
 UNLABELED = 0
 
+# The crop from Eigen et al. (2014) that depth papers evaluate on: rows 45 to
+# 470, columns 41 to 600. It removes the white border that undistortion left
+# around each NYUv2 image. Without it, a seed at the bottom centre lands on
+# white border pixels.
+Region = tuple[slice, slice]
+EIGEN_CROP: Region = (slice(45, 471), slice(41, 601))
+
 
 @dataclasses.dataclass(frozen=True, eq=False)
 class Sample:
@@ -45,6 +52,21 @@ class Sample:
     depth: np.ndarray
     floor: np.ndarray
     labeled: np.ndarray
+
+
+def crop(sample: Sample, region: Region = EIGEN_CROP) -> Sample:
+    """Returns the sample cut down to region (rows, cols).
+
+    Arrays are copied into contiguous memory, which OpenCV requires.
+    """
+    rows, cols = region
+    return dataclasses.replace(
+        sample,
+        rgb=np.ascontiguousarray(sample.rgb[rows, cols]),
+        depth=np.ascontiguousarray(sample.depth[rows, cols]),
+        floor=np.ascontiguousarray(sample.floor[rows, cols]),
+        labeled=np.ascontiguousarray(sample.labeled[rows, cols]),
+    )
 
 
 def matlab_to_hwc(image: np.ndarray) -> np.ndarray:

@@ -143,6 +143,19 @@ def test_length_and_index_bounds(fake_mat: pathlib.Path) -> None:
             data[-1]
 
 
+def test_crop_cuts_every_array_to_the_region(fake_mat: pathlib.Path) -> None:
+    with nyuv2.NyuV2(fake_mat) as data:
+        full = data[0]
+    region = (slice(0, 1), slice(1, 3))
+    cut = nyuv2.crop(full, region)
+    for name in ("rgb", "depth", "floor", "labeled"):
+        np.testing.assert_array_equal(
+            getattr(cut, name), getattr(full, name)[region]
+        )
+    assert cut.rgb.flags["C_CONTIGUOUS"]
+    assert cut.index == full.index
+
+
 # --- Hole 2: the split ------------------------------------------------------
 
 
@@ -184,3 +197,4 @@ def test_real_dataset_matches_the_paper() -> None:
     assert sample.rgb.shape == (480, 640, 3)
     assert sample.depth.shape == (480, 640)
     assert 0 < float(sample.depth.max()) < 10.5  # Kinect range, metres
+    assert nyuv2.crop(sample).rgb.shape == (426, 560, 3)
