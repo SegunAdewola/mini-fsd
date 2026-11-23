@@ -130,7 +130,7 @@ end. Big integration problems show up now, not in December.
   labeled set (images, depth, floor mask from the class named "floor", looked up
   in the file) with the official 795/654 split. Test: a tiny synthetic `.mat`
   fixture with known values; shapes, dtypes and the floor mask match.
-- [ ] V3 `[CV]` feat(perception): `minifsd.perception.floor_classical`, region
+- [x] V3 `[CV]` feat(perception): `minifsd.perception.floor_classical`, region
   growing from a bottom-center seed with an edge stop. Test: a synthetic image
   with a known floor region gives IoU above 0.95; the mask is empty or contains
   the seed (property); nothing above the horizon (property). Tune on NYUv2
@@ -159,7 +159,7 @@ end. Big integration problems show up now, not in December.
 
 ### Robot track
 
-- [ ] R1 `[R]` feat(world): `minifsd.world.floor_plan.generate_floor_plan`, a
+- [x] R1 `[R]` feat(world): `minifsd.world.floor_plan.generate_floor_plan`, a
   seeded hallway with numbered rooms. Test (properties over seeds): room numbers
   unique; door gaps open; hallway closed elsewhere; spawn clear of walls; same
   seed gives the same layout; `rooms_per_side=0` raises `ValueError`.
@@ -307,3 +307,6 @@ Add a row at the end of each session.
   about 40% of NYUv2 images have floor at the bottom centre, so the baseline
   reports IoU on all images and on that subset. Settings tuned on train
   (tolerance 2, Canny 80/200, train IoU 0.278).
+- **2026-11-23** V3 result, NYUv2 test (654 images, run once): floor IoU 0.236
+  overall, 0.440 on the 266 images with floor at the bottom centre; 1.5 ms p50
+  on the M1. The worst images are all cases where the seed missed the floor.
