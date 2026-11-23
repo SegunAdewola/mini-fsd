@@ -234,20 +234,45 @@ Not decided yet. Each has the step where it must be settled.
 - **Real photos depend on campus access** (M2). If campus slips past about Dec
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
+
 - **Depth Anything 3 Small gives relative depth only** (V5, M3). Metric scale
   must come from known camera height and the floor plane.
+
 - **DINOv3 weights are gated** under Meta's DINOv3 License (M3). Request access
   early; note the license in the report.
+
 - **EfficientViT is unmaintained** and has no usable B0 segmentation weights
   (M3). Use the timm ImageNet backbone or drop it for SegFormer-B0.
+
 - **CoreML INT8 on an M1 saves size, not time** (M5). The Neural Engine is not
   reachable from Docker. First thing to cut from E6.
+
 - **Explorer limits** (M3): `gpu` partition 8 h max, 1 GPU per job; SSH keys
   required since Nov 6, 2026. Training must checkpoint and resume.
+
 - **YOLO26 is AGPL-3.0** (M3). Decide whether that affects the repo license (ADR
   0006\) or how ultralytics is used.
+
 - **Torch on the M1** (V5). Torch and transformers go in a separate pixi
   environment so the ROS env stays small. Confirm disk space first.
+
+- **The campus floors are open plan, not corridors** (V7, M2). Floors 2, 14 and
+  15 are open areas around a central core (8 elevators, 2 stairwells), with desk
+  clusters and meeting rooms on the edge. R1 only makes corridors. Add a second
+  layout type to the generator: open floor, central core, furniture clusters.
+  Plans live in `private/floor-plans/` (never committed).
+
+- **Glass walls** (V7, M3). Most rooms on the campus floors have glass walls and
+  doors. Monocular depth tends to see through glass. Render some walls as glass
+  in the generator, shoot glass on purpose for the real set, and report it as a
+  known failure case.
+
+- **Angled and curved walls** (digital twin, after R8). `Wall` is axis-aligned.
+  A twin of a campus floor needs walls with an angle; R2 and R7 change by a few
+  lines when that happens.
+
+- **Floor-plan scale** (M2). Assumed elevator door 1.1 m; confirm one real
+  measurement on campus and rescale if needed.
 
 ## Hours log
 
@@ -270,7 +295,9 @@ Add a row at the end of each session.
   numbers (6.4 GB env, 2 ms offscreen render). The `map_server` spike check
   moved from 0.4 to R8, where the real map is served anyway.
 - **2026-11-22** CI tests in a ROS-free `core` env; branch protection dropped to
-  save time. Real photos: one building with three floors (floor 1 for
-  validation, floors 2 and 3 for test), not the 2 to 3 extra buildings in the
-  proposal. Claims are limited to unseen floors of a known building; NYUv2 test
-  covers unseen buildings.
+  save time. Real photos: one building, floors 2, 14 and 15, not the 2 to 3
+  extra buildings in the proposal. Floors 14 and 15 share a layout, so
+  validation is floor 15 and test is floors 14 and 2 (floor 2 is the unseen
+  layout). Claims are limited to unseen floors of a known building; NYUv2 test
+  covers unseen buildings. R1 renamed from "building" to "floor plan", since it
+  makes one floor and "floor" alone already means the floor mask.
