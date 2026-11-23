@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: prefix-dev/setup-pixi@v0.11.3
@@ -36,7 +36,7 @@ jobs:
           SKIP: mypy
 
   test:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: prefix-dev/setup-pixi@v0.11.3

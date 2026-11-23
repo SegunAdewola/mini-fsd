@@ -59,6 +59,17 @@ README). Read those for detail; do not duplicate them here.
   validation set only.
 - Plain, human writing in docs and reports. No AI-sounding phrasing.
 
+## Writing style (chat replies, docs, reports, code comments)
+
+- Eliminate "AI-ese": avoid predictable sentence structures, especially the
+  negative parallel (for example, "doing X without ever seeing Y").
+- Vary sentence length. Mix very short sentences with longer ones.
+- Keep relative pronouns. Do not drop "that", "which" or "who" when linking
+  clauses.
+- No "false deep" tone. Never sound poetic or philosophical about mundane
+  technical topics.
+- Root descriptions in specifics. Use concrete nouns, not sweeping abstractions.
+
 ## Commands (run from the repo root)
 
 - Environment: `pixi install`, then `pixi shell` (or prefix any command with
