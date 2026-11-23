@@ -13,12 +13,14 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Data, renders, checkpoints, media (too big for git; live on Explorer / S3)
-data/
-runs/
-checkpoints/
+# Data, renders, checkpoints, media (too big for git; live on Explorer / S3).
+# The leading / matches only the repo root, so src/minifsd/data/ (code) is
+# still tracked.
+/data/
+/runs/
+/checkpoints/
 wandb/
-media/
+/media/
 *.pt
 *.pth
 *.onnx
@@ -27,7 +29,7 @@ media/
 *.mov
 
 # Campus floor plans and digital twin geometry (not public without the campus's OK)
-private/
+/private/
 
 # Agent config (CLAUDE.md, skills, hooks): kept local and private
 CLAUDE.md
@@ -37,5 +39,5 @@ CLAUDE.md
 .DS_Store
 
 # Paper PDFs (see docs/papers.md) and downloaded Vale style packages
-papers/
+/papers/
 .vale/styles/
