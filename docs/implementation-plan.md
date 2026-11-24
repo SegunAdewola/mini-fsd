@@ -153,7 +153,7 @@ end. Big integration problems show up now, not in December.
 - [x] V7 `[CV]` feat(data): `minifsd.data.datagen` renders RGB, floor mask and
   depth from the sim (needs R3), split by floor-plan seed. Test: no seed in two
   splits (property); mask and depth line up with the RGB frame.
-- [ ] V8 `[CV]` feat(demo): `minifsd.demo` CLI, folder of images in, overlay
+- [x] V8 `[CV]` feat(demo): `minifsd.demo` CLI, folder of images in, overlay
   images out (classical floor baseline for now). Test: two input images give two
   output files of the same size.
 - [x] V9 `[CV]` feat(perception): input-size sweep for Depth Anything V2 Small
@@ -402,3 +402,12 @@ Add a row at the end of each session.
   px misses the 50 ms budget, so size alone won't do it; ONNX, INT8 or a
   distilled head is still needed (E3, E6). The global-fit AbsRel stays near 0.35
   at every size, which is a scale problem, not a resolution one.
+- **2026-11-24** V8 demo.
+  `python -m minifsd.demo.run --input photos/ --output out/` writes one floor
+  overlay per photo at the photo's own size. The models see a copy shrunk to 640
+  px on the long side, because the classical baseline's blur, Canny and fill
+  settings are in pixels and were tuned on 640 x 480 NYUv2; the mask is scaled
+  back with nearest neighbour. 2 to 6 ms a frame after a first-call warm-up. On
+  NYUv2 train and sim frames the overlays show the baseline's failures plainly:
+  it fills a chair seat or tabletop when the seed lands on one, and in the sim
+  it floods the walls, which are a flat grey close to the floor's.
