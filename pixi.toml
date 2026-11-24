@@ -84,6 +84,9 @@ typecheck = "mypy"
 [feature.cv.dependencies]
 pytorch = "2.14.*"
 transformers = "*"   # Depth Anything V2 and other Hugging Face models
+# Apple Accelerate (the M1's AMX matrix unit) instead of OpenBLAS: 2.2x faster
+# CPU torch on Depth Anything V2 Small (V5). Same torch build either way.
+libblas = { version = "*", build = "*accelerate" }
 
 # Lint and format tools (ADR 0005).
 [feature.lint.dependencies]
