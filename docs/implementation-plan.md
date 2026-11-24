@@ -183,13 +183,13 @@ end. Big integration problems show up now, not in December.
   `pixi run sim` and `pixi run teleop`. Test (by hand): RViz shows the camera;
   teleop drives; walls stop the robot; closing teleop stops it. Record the Week
   9 video.
-- [ ] R7 `[R]` feat(world): `minifsd.world.occupancy`, layout to occupancy grid
+- [x] R7 `[R]` feat(world): `minifsd.world.occupancy`, layout to occupancy grid
   (PGM plus YAML for `map_server`). Test: wall cells occupied, door cells free
   (property).
-- [ ] R8 `[R]` feat(bringup): Nav2 on the generated map with ground-truth pose
+- [x] R8 `[R]` feat(bringup): Nav2 on the generated map with ground-truth pose
   (ADR 0004), Smac 2D planner and MPPI controller. Test (by hand): a goal
   clicked in RViz reaches the target.
-- [ ] R9 `[R]` feat(mission): `minifsd.mission.goals.parse_goal` ("go to room
+- [x] R9 `[R]` feat(mission): `minifsd.mission.goals.parse_goal` ("go to room
   103" to a pose in front of that door) and `mission_node` sending
   `NavigateToPose`. Test: every room in a layout resolves (property); unknown
   rooms raise.
@@ -327,3 +327,14 @@ Add a row at the end of each session.
   camera and depth in RViz, teleop drives the robot and walls stop it. The Week
   9 video is recorded (kept out of git). No teleop stutter with the 0.3 s
   watchdog, so the watchdog stays as it is.
+- **2026-11-23** R8 uses a lean Nav2 launch of our own (map_server, planner,
+  controller, behaviours, BT navigator, lifecycle manager) instead of
+  nav2_bringup's: its collision monitor needs a `/scan` we don't have. Smac 2D
+  and MPPI as planned; inflation radius 0.55 m so 0.9 m doors stay cheap. The
+  map is written at launch from the sim's seed. Nav2 here drives on the known
+  map and the true pose; no perception is in the loop until R10 and M4, and the
+  report must say so.
+- **2026-11-24** R9: instructions must hold exactly one room number; the rest of
+  the text is ignored. `mission_node` takes `/mission` (String), sends
+  `NavigateToPose` and reports on `/mission/status`. End-to-end run: "Go to room
+  104" succeeded; "go to room 999" was rejected with the list of rooms.
