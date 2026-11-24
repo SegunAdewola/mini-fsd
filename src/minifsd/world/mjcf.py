@@ -18,6 +18,7 @@ SPAWN_KEY = "spawn"
 JOINTS = ("base_x", "base_y", "base_yaw")
 ACTUATORS = ("vel_x", "vel_y", "vel_yaw")
 CAMERA = "front_camera"
+CEILING = "ceiling"
 
 CAMERA_HEIGHT = 0.5  # metres above the floor
 FOVY_DEG = 50.0  # vertical field of view
@@ -40,6 +41,8 @@ KV_LINEAR = 200.0
 KV_YAW = 4.0  # yaw inertia is 0.5 * m * r^2 = 0.2 kg m^2, so also 0.05 s
 
 WALL_RGBA = (0.85, 0.85, 0.8, 1)
+CEILING_RGBA = (0.92, 0.92, 0.9, 1)
+CEILING_HALF_THICKNESS = 0.01
 SIGN_RGBA = (0.1, 0.3, 0.6, 1)
 ROBOT_RGBA = (0.9, 0.4, 0.1, 1)
 
@@ -91,13 +94,27 @@ def build_mjcf(plan: floor_plan.FloorPlan) -> str:
     )
 
     world = ET.SubElement(root, "worldbody")
-    ET.SubElement(world, "light", pos=_fmt(plan.length / 2, 0, 4), dir="0 0 -1")
+    # Directional lights with no shadows: even light in every room, like a
+    # building's ceiling lights. Spot lights (MuJoCo's default) light only a
+    # cone, and shadowing lights above the ceiling would leave the floor
+    # dark. The second, angled light shades walls by the way they face.
     ET.SubElement(
         world,
         "light",
-        pos=_fmt(0, 0, 3),
-        dir=_fmt(1, 0, -0.5),
-        diffuse=".4 .4 .4",
+        directional="true",
+        castshadow="false",
+        pos=_fmt(plan.length / 2, 0, WALL_HEIGHT),
+        dir="0 0 -1",
+        diffuse=".6 .6 .6",
+    )
+    ET.SubElement(
+        world,
+        "light",
+        directional="true",
+        castshadow="false",
+        pos=_fmt(0, 0, WALL_HEIGHT),
+        dir=_fmt(1, 0.4, -0.6),
+        diffuse=".35 .35 .35",
     )
     # The floor is only for looks: the robot has no vertical joint, so it
     # can't fall, and turning off its contacts avoids floor friction.
@@ -132,6 +149,31 @@ def build_mjcf(plan: floor_plan.FloorPlan) -> str:
             ),
             rgba=_fmt(*WALL_RGBA),
         )
+
+    # Without a ceiling the camera sees empty sky above the walls once it
+    # looks more than about 4 m ahead. A thin box, not a plane: planes render
+    # from one side only. Visual only, like the floor.
+    xs = [v for w in plan.walls for v in (w.x_min, w.x_max)]
+    ys = [v for w in plan.walls for v in (w.y_min, w.y_max)]
+    ET.SubElement(
+        world,
+        "geom",
+        name=CEILING,
+        type="box",
+        size=_fmt(
+            (max(xs) - min(xs)) / 2,
+            (max(ys) - min(ys)) / 2,
+            CEILING_HALF_THICKNESS,
+        ),
+        pos=_fmt(
+            (min(xs) + max(xs)) / 2,
+            (min(ys) + max(ys)) / 2,
+            WALL_HEIGHT + CEILING_HALF_THICKNESS,
+        ),
+        rgba=_fmt(*CEILING_RGBA),
+        contype="0",
+        conaffinity="0",
+    )
 
     half_hall = plan.hallway_width / 2
     for room in plan.rooms:

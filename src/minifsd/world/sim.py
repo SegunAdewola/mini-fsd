@@ -73,6 +73,7 @@ class Sim:
         self._w = 0.0
         self._last_command_time = -math.inf  # no command yet: stay still
         self._renderer: mujoco.Renderer | None = None
+        self._floor_geom = self.model.geom("floor").id
 
     @property
     def time(self) -> float:
@@ -112,6 +113,22 @@ class Sim:
                 self.data.ctrl[ctrl] = value
             mujoco.mj_step(self.model, self.data)
 
+    def set_pose(self, pose: floor_plan.Pose2D) -> None:
+        """Puts the robot at a pose, at rest, without stepping physics.
+
+        For rendering training frames (V7); driving uses command() and step().
+
+        Args:
+            pose: The new pose in the world frame.
+        """
+        for i, value in zip(
+            self._qpos, (pose.x, pose.y, pose.yaw), strict=True
+        ):
+            self.data.qpos[i] = value
+        self.data.qvel[:] = 0.0
+        self._v = self._w = 0.0
+        mujoco.mj_forward(self.model, self.data)  # update positions, cameras
+
     def pose(self) -> floor_plan.Pose2D:
         """The robot's true pose in the world frame (ADR 0004)."""
         x, y, yaw = (float(self.data.qpos[i]) for i in self._qpos)
@@ -143,6 +160,22 @@ class Sim:
         depth = np.asarray(r.render(), dtype=np.float32)
         r.disable_depth_rendering()
         return depth
+
+    def render_floor_mask(self) -> np.ndarray:
+        """Which camera pixels show the floor: (H, W) bool.
+
+        Uses MuJoCo's segmentation rendering, which reports the geom behind
+        every pixel, so the mask is exact.
+        """
+        r = self._get_renderer()
+        r.enable_segmentation_rendering()
+        r.update_scene(self.data, camera=mjcf.CAMERA)
+        seg = np.asarray(r.render())  # (H, W, 2): object id, object type
+        r.disable_segmentation_rendering()
+        is_floor = (seg[..., 0] == self._floor_geom) & (
+            seg[..., 1] == mujoco.mjtObj.mjOBJ_GEOM
+        )
+        return np.asarray(is_floor, dtype=bool)
 
     def close(self) -> None:
         """Frees the renderer's OpenGL context."""

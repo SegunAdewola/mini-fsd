@@ -127,3 +127,22 @@ def test_any_floor_plan_compiles(seed: int, n: int) -> None:
         model.geom(i).name.startswith("wall_") for i in range(model.ngeom)
     )
     assert walls == len(plan.walls)
+
+
+def test_ceiling_covers_the_floor_plan_at_wall_height() -> None:
+    model = _compile(PLAN)
+    ceiling = model.geom(mjcf.CEILING)
+    # A thin box (planes render from one side only); its underside is at
+    # the top of the walls.
+    assert ceiling.type[0] == mujoco.mjtGeom.mjGEOM_BOX
+    assert ceiling.pos[2] - ceiling.size[2] == pytest.approx(mjcf.WALL_HEIGHT)
+    xs = [v for w in PLAN.walls for v in (w.x_min, w.x_max)]
+    ys = [v for w in PLAN.walls for v in (w.y_min, w.y_max)]
+    # Box sizes are half-lengths, centred on pos.
+    eps = 1e-9  # float noise from centre +- half-size
+    assert ceiling.pos[0] - ceiling.size[0] <= min(xs) + eps
+    assert ceiling.pos[0] + ceiling.size[0] >= max(xs) - eps
+    assert ceiling.pos[1] - ceiling.size[1] <= min(ys) + eps
+    assert ceiling.pos[1] + ceiling.size[1] >= max(ys) - eps
+    # Visual only: the robot can't reach it anyway.
+    assert ceiling.contype[0] == 0 and ceiling.conaffinity[0] == 0

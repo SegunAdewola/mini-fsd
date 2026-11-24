@@ -12,6 +12,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from minifsd.geometry import frames
 from minifsd.world import floor_plan, mjcf, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
@@ -136,3 +137,58 @@ def test_body_to_world_keeps_speed_and_turn_rate(
     if abs(v) > 1e-6:  # moving: along the heading, or straight back
         along = vx * math.cos(yaw) + vy * math.sin(yaw)
         assert along == pytest.approx(v, abs=1e-9)
+
+
+def test_set_pose_moves_the_robot_without_stepping(s: sim.Sim) -> None:
+    target = floor_plan.Pose2D(3.0, 0.4, 1.2)
+    s.set_pose(target)
+    p = s.pose()
+    assert (p.x, p.y, p.yaw) == pytest.approx((3.0, 0.4, 1.2))
+    assert s.time == 0.0
+    assert s.velocity() == pytest.approx((0.0, 0.0))
+
+
+@pytest.mark.gl
+def test_floor_mask_is_the_bottom_of_the_image(s: sim.Sim) -> None:
+    mask = s.render_floor_mask()
+    assert mask.shape == (mjcf.IMAGE_HEIGHT, mjcf.IMAGE_WIDTH)
+    assert mask.dtype == np.bool_
+    # A level camera sees floor below the horizon and none above it.
+    assert mask[-1].all()
+    assert not mask[: mjcf.IMAGE_HEIGHT // 2 - 2].any()
+
+
+@pytest.mark.gl
+def test_floor_depth_matches_the_ground_plane(s: sim.Sim) -> None:
+    # For a level camera at height h, a floor pixel in row v is at depth
+    # h * fy / (v - cy) along the viewing axis. This ties the floor mask,
+    # the depth image and the R4 intrinsics together.
+    k = frames.intrinsics_from_fovy(
+        mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, mjcf.FOVY_DEG
+    )
+    mask, depth = s.render_floor_mask(), s.render_depth()
+    rows = np.arange(mjcf.IMAGE_HEIGHT)[:, None].repeat(mjcf.IMAGE_WIDTH, 1)
+    near = mask & (rows > k.cy + 20)  # well below the horizon
+    expected = mjcf.CAMERA_HEIGHT * k.fy / (rows[near] - k.cy)
+    np.testing.assert_allclose(depth[near], expected, rtol=0.02)
+
+
+@pytest.mark.gl
+def test_no_sky_down_a_long_hallway(s: sim.Sim) -> None:
+    # Looking along the hallway, every pixel hits geometry inside the
+    # building, so no depth is beyond its far corner.
+    xs = [v for w in PLAN.walls for v in (w.x_min, w.x_max)]
+    ys = [v for w in PLAN.walls for v in (w.y_min, w.y_max)]
+    diagonal = float(np.hypot(max(xs) - min(xs), max(ys) - min(ys)))
+    s.set_pose(floor_plan.Pose2D(0.5, 0.0, 0.0))
+    depth = s.render_depth()
+    assert depth.max() < diagonal + mjcf.WALL_HEIGHT
+
+
+@pytest.mark.gl
+def test_floor_is_lit_under_the_ceiling(s: sim.Sim) -> None:
+    # Lights above the ceiling would leave the floor in its shadow. The
+    # floor texture's colours are about 100 to 140 of 255; lit, the floor
+    # pixels should average well above black.
+    rgb, mask = s.render_rgb(), s.render_floor_mask()
+    assert rgb[mask].mean() > 60
