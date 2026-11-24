@@ -175,11 +175,11 @@ end. Big integration problems show up now, not in December.
   optical frame rotation and camera intrinsics from field of view. Test: optical
   axes map to base axes; fy for 240 px at 50 degrees; quaternions stay unit
   length and yaw round-trips (property).
-- [ ] R5 `[R]` feat(sim): ROS package `mini_fsd_sim` with `sim_node` publishing
+- [x] R5 `[R]` feat(sim): ROS package `mini_fsd_sim` with `sim_node` publishing
   `/clock`, `/odom`, `/tf`, `/tf_static`, camera, depth and camera info;
   subscribes `/cmd_vel`. Test: in-process smoke test receives odom and an image,
   and odom x grows after a forward command.
-- [ ] R6 `[R]` feat(bringup): `mini_fsd_bringup` launch file, RViz config,
+- [x] R6 `[R]` feat(bringup): `mini_fsd_bringup` launch file, RViz config,
   `pixi run sim` and `pixi run teleop`. Test (by hand): RViz shows the camera;
   teleop drives; walls stop the robot; closing teleop stops it. Record the Week
   9 video.
@@ -323,3 +323,7 @@ Add a row at the end of each session.
   (`option --editable not recognized`). The build task drops the flag instead of
   pinning an old setuptools; a rebuild takes about 4 s and the ROS tasks rebuild
   first.
+- **2026-11-23** R6 done, M1 robot track complete: `pixi run sim` shows the
+  camera and depth in RViz, teleop drives the robot and walls stop it. The Week
+  9 video is recorded (kept out of git). No teleop stutter with the 0.3 s
+  watchdog, so the watchdog stays as it is.
