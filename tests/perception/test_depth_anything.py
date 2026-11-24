@@ -10,6 +10,8 @@ import pathlib
 
 import numpy as np
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from minifsd.perception import depth_anything
 
@@ -32,6 +34,38 @@ def test_input_size_keeps_aspect_and_is_a_multiple_of_14(
     assert ww / hh == pytest.approx(w / h, rel=0.03)
 
 
+@given(
+    patches=st.integers(min_value=2, max_value=40),
+    h=st.integers(min_value=20, max_value=500),
+    w=st.integers(min_value=20, max_value=500),
+)
+def test_smaller_input_sizes_follow_the_same_rules(
+    patches: int, h: int, w: int
+) -> None:
+    # The input-size sweep (E6): any multiple of 14 works as the short side.
+    short_side = patches * depth_anything.PATCH
+    x = depth_anything.preprocess(
+        np.zeros((h, w, 3), dtype=np.uint8), short_side=short_side
+    )
+    _, _, hh, ww = x.shape
+    assert hh % 14 == 0 and ww % 14 == 0
+    assert short_side <= min(hh, ww) < short_side + 14
+    # The short side lands on short_side exactly; rounding the long side to
+    # a multiple of 14 moves it by at most 7 px, and the long side is at
+    # least short_side, so the ratio is off by at most 7 / short_side.
+    assert ww / hh == pytest.approx(w / h, rel=0.5 / patches * 1.001)
+
+
+@pytest.mark.parametrize("short_side", [0, -14, 100, 7])
+def test_rejects_a_short_side_that_is_not_a_positive_multiple_of_14(
+    short_side: int,
+) -> None:
+    with pytest.raises(ValueError):
+        depth_anything.preprocess(
+            np.zeros((240, 320, 3), dtype=np.uint8), short_side=short_side
+        )
+
+
 def test_normalises_with_imagenet_statistics() -> None:
     grey = np.full((240, 320, 3), 128, dtype=np.uint8)
     x = depth_anything.preprocess(grey)
@@ -47,15 +81,20 @@ def test_rejects_non_rgb_input() -> None:
         depth_anything.preprocess(np.zeros((240, 320), dtype=np.uint8))
 
 
-def _model() -> depth_anything.DepthAnything:
+def _model(
+    short_side: int = depth_anything.SHORT_SIDE,
+) -> depth_anything.DepthAnything:
     pytest.importorskip("torch")
     if not (MODEL_DIR / "model.safetensors").is_file():
         pytest.skip(f"weights not in {MODEL_DIR}")
-    return depth_anything.DepthAnything(MODEL_DIR, device="cpu")
+    return depth_anything.DepthAnything(
+        MODEL_DIR, device="cpu", short_side=short_side
+    )
 
 
-def test_disparity_has_the_input_size() -> None:
-    model = _model()
+@pytest.mark.parametrize("short_side", [depth_anything.SHORT_SIDE, 154])
+def test_disparity_has_the_input_size(short_side: int) -> None:
+    model = _model(short_side)
     rgb = np.random.default_rng(0).integers(0, 255, (240, 320, 3), np.uint8)
     disparity = model.predict(rgb)
     assert disparity.shape == (240, 320)

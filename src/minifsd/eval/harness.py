@@ -212,44 +212,69 @@ def append_result(
         f.write(json.dumps(row) + "\n")
 
 
-def _floor_classical(device: str, threads: int) -> Candidate:
+def _floor_classical(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
     del device, threads  # OpenCV only, capped by set_thread_cap
+    if input_size is not None:
+        raise ValueError("floor-classical runs at full size; no input_size")
     from minifsd.perception import floor_classical
 
     return Candidate("floor-classical", "floor", floor_classical.floor_mask)
 
 
-def _depth_anything(device: str, threads: int) -> Candidate:
+def _depth_anything(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
     import torch
 
     from minifsd.perception import depth_anything
 
     torch.set_num_threads(threads)
+    name = "depth-anything-v2-small"
+    if input_size is None:
+        input_size = depth_anything.SHORT_SIDE
+    else:
+        name += f"@{input_size}"  # the log tells sweep runs apart by name
     model = depth_anything.DepthAnything(
-        pathlib.Path("data/models/depth-anything-v2-small"), device=device
+        pathlib.Path("data/models/depth-anything-v2-small"),
+        device=device,
+        short_side=input_size,
     )
-    return Candidate("depth-anything-v2-small", "depth", model.predict)
+    return Candidate(name, "depth", model.predict)
 
 
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
-CANDIDATES: dict[str, Callable[[str, int], Candidate]] = {
+# Factories take (device, threads, input_size); input_size is the model's
+# input short side, or None for its default.
+CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "floor-classical": _floor_classical,
     "depth-anything-v2-small": _depth_anything,
 }
 
 
-def make_candidate(name: str, device: str, threads: int) -> Candidate:
+def make_candidate(
+    name: str, device: str, threads: int, input_size: int | None = None
+) -> Candidate:
     """Builds a registered candidate.
 
+    Args:
+        name: A key of CANDIDATES.
+        device: "cpu" or "mps".
+        threads: The thread cap.
+        input_size: The input's short side in pixels, for models that take
+            one; it is appended to the name, e.g. "...@266".
+
     Raises:
-        ValueError: For an unknown name.
+        ValueError: For an unknown name, or an input_size the model can't
+            take.
     """
     if name not in CANDIDATES:
         raise ValueError(
             f"unknown candidate {name!r}; known: {list(CANDIDATES)}"
         )
-    return CANDIDATES[name](device, threads)
+    return CANDIDATES[name](device, threads, input_size)
 
 
 def load_dataset(name: str, limit: int | None = None) -> Iterator[Any]:
@@ -298,6 +323,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps"])
     parser.add_argument("--limit", type=int, help="score only the first N")
     parser.add_argument(
+        "--input-size",
+        type=int,
+        help="model input short side in px (a multiple of 14 for ViTs)",
+    )
+    parser.add_argument(
         "--fit",
         default="nyuv2-fit",
         help="depth only: dataset for the global scale and shift",
@@ -306,7 +336,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     set_thread_cap(args.threads)  # before any model library loads
-    candidate = make_candidate(args.candidate, args.device, args.threads)
+    candidate = make_candidate(
+        args.candidate, args.device, args.threads, args.input_size
+    )
     candidate.predict(np.zeros((240, 320, 3), np.uint8))  # warm-up
     fit = load_dataset(args.fit) if candidate.task == "depth" else None
     result = evaluate(
@@ -316,7 +348,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.threads,
         fit,
     )
-    append_result(result, args.out, device=args.device, fit=args.fit)
+    append_result(
+        result,
+        args.out,
+        device=args.device,
+        fit=args.fit,
+        input_size=args.input_size,
+    )
 
     print(f"{result.candidate} on {result.dataset} ({result.n_images} images)")
     for key, value in result.metrics.items():

@@ -30,25 +30,33 @@ def _multiple_at_least(x: float, minimum: int) -> int:
     return y if y >= minimum else math.ceil(x / PATCH) * PATCH
 
 
-def preprocess(rgb: np.ndarray) -> np.ndarray:
+def preprocess(rgb: np.ndarray, short_side: int = SHORT_SIDE) -> np.ndarray:
     """Turns an RGB image into the model's input tensor.
 
     Args:
         rgb: (H, W, 3) uint8.
+        short_side: Target for the shorter side, a positive multiple of 14.
+            Smaller is faster; fewer patches means less compute (E6).
 
     Returns:
-        (1, 3, h, w) float32, normalised, with min(h, w) >= SHORT_SIDE and
+        (1, 3, h, w) float32, normalised, with min(h, w) >= short_side and
         both sides multiples of 14.
 
     Raises:
-        ValueError: If the image isn't (H, W, 3).
+        ValueError: If the image isn't (H, W, 3) or short_side isn't a
+            positive multiple of 14.
     """
     if rgb.ndim != 3 or rgb.shape[2] != 3:
         raise ValueError(f"expected (H, W, 3) RGB, got {rgb.shape}")
+    if short_side <= 0 or short_side % PATCH:
+        raise ValueError(
+            f"short_side must be a positive multiple of {PATCH}, "
+            f"got {short_side}"
+        )
     h, w = rgb.shape[:2]
-    scale = SHORT_SIDE / min(h, w)
-    min_h = SHORT_SIDE if h <= w else 0
-    min_w = SHORT_SIDE if w < h else 0
+    scale = short_side / min(h, w)
+    min_h = short_side if h <= w else 0
+    min_w = short_side if w < h else 0
     new_h = _multiple_at_least(h * scale, min_h)
     new_w = _multiple_at_least(w * scale, min_w)
     resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
@@ -61,19 +69,26 @@ def preprocess(rgb: np.ndarray) -> np.ndarray:
 class DepthAnything:
     """The model, loaded from a local folder (no network at run time)."""
 
-    def __init__(self, model_dir: pathlib.Path, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        model_dir: pathlib.Path,
+        device: str = "cpu",
+        short_side: int = SHORT_SIDE,
+    ) -> None:
         """Loads the weights.
 
         Args:
             model_dir: Folder with config.json and model.safetensors, e.g.
                 data/models/depth-anything-v2-small.
             device: "cpu" or "mps" (the Apple GPU).
+            short_side: Input size; see preprocess.
         """
         import torch
         import transformers
 
         self._torch = torch
         self.device = device
+        self.short_side = short_side
         self.model = (
             transformers.AutoModelForDepthEstimation.from_pretrained(
                 str(model_dir)
@@ -94,7 +109,7 @@ class DepthAnything:
         """
         torch = self._torch
         h, w = rgb.shape[:2]
-        x = torch.from_numpy(preprocess(rgb)).to(self.device)
+        x = torch.from_numpy(preprocess(rgb, self.short_side)).to(self.device)
         with torch.inference_mode():
             out = self.model(pixel_values=x).predicted_depth  # (1, h', w')
             out = torch.nn.functional.interpolate(

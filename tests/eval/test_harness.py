@@ -125,3 +125,25 @@ def test_unknown_names_are_rejected() -> None:
         harness.make_candidate("no-such-model", device="cpu", threads=1)
     with pytest.raises(ValueError):
         list(harness.load_dataset("no-such-data"))
+
+
+def test_input_size_is_only_for_models_that_have_one() -> None:
+    with pytest.raises(ValueError):
+        harness.make_candidate(
+            "floor-classical", device="cpu", threads=1, input_size=266
+        )
+
+
+def test_input_size_goes_into_the_candidate_name() -> None:
+    # The name is what the results log groups by, so each size of the
+    # sweep must get its own.
+    pytest.importorskip("torch")
+    if not pathlib.Path(
+        "data/models/depth-anything-v2-small/model.safetensors"
+    ).is_file():
+        pytest.skip("weights not downloaded")
+    c = harness.make_candidate(
+        "depth-anything-v2-small", device="cpu", threads=1, input_size=266
+    )
+    assert c.name == "depth-anything-v2-small@266"
+    assert c.predict(np.zeros((240, 320, 3), np.uint8)).shape == (240, 320)
