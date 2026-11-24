@@ -1,0 +1,106 @@
+"""Tests for minifsd.data.datagen: sim frames with exact labels."""
+
+import json
+import pathlib
+
+import cv2
+import numpy as np
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from minifsd.data import datagen
+from minifsd.world import floor_plan, mjcf
+
+PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
+
+
+def _distance_to_walls(plan: floor_plan.FloorPlan, x: float, y: float) -> float:
+    def to_box(w: floor_plan.Wall) -> float:
+        dx = max(w.x_min - x, 0.0, x - w.x_max)
+        dy = max(w.y_min - y, 0.0, y - w.y_max)
+        return float(np.hypot(dx, dy))
+
+    return min(to_box(w) for w in plan.walls)
+
+
+@settings(max_examples=20, deadline=None)
+@given(
+    st.integers(min_value=0, max_value=2**32 - 1),
+    st.integers(min_value=1, max_value=5),
+)
+def test_poses_are_clear_of_walls_and_inside(seed: int, n: int) -> None:
+    plan = floor_plan.generate_floor_plan(seed, rooms_per_side=n)
+    poses = datagen.sample_poses(plan, 30, np.random.default_rng(seed))
+    assert len(poses) == 30
+    xs = [w.x_min for w in plan.walls] + [w.x_max for w in plan.walls]
+    ys = [w.y_min for w in plan.walls] + [w.y_max for w in plan.walls]
+    for p in poses:
+        assert min(xs) < p.x < max(xs) and min(ys) < p.y < max(ys)
+        # A cell of slack: the grid is 5 cm, the clearance is exact.
+        assert _distance_to_walls(plan, p.x, p.y) >= datagen.CLEARANCE - 0.05
+        assert -np.pi <= p.yaw < np.pi
+
+
+def test_poses_are_reproducible() -> None:
+    a = datagen.sample_poses(PLAN, 5, np.random.default_rng(3))
+    b = datagen.sample_poses(PLAN, 5, np.random.default_rng(3))
+    assert a == b
+
+
+@given(st.integers(min_value=1, max_value=10_000))
+def test_no_seed_is_in_two_splits(n: int) -> None:
+    splits = {name: set(datagen.seeds_for(name, n)) for name in datagen.SPLITS}
+    assert all(len(seeds) == n for seeds in splits.values())
+    names = list(splits)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            assert not splits[a] & splits[b], (a, b)
+
+
+def test_rejects_an_unknown_split() -> None:
+    with pytest.raises(ValueError):
+        datagen.seeds_for("holdout", 3)
+
+
+@pytest.mark.gl
+def test_frames_have_aligned_labels() -> None:
+    poses = datagen.sample_poses(PLAN, 3, np.random.default_rng(0))
+    frames = list(datagen.render_frames(PLAN, poses))
+    assert len(frames) == 3
+    h, w = mjcf.IMAGE_HEIGHT, mjcf.IMAGE_WIDTH
+    for f in frames:
+        assert f.rgb.shape == (h, w, 3) and f.rgb.dtype == np.uint8
+        assert f.floor.shape == (h, w) and f.floor.dtype == np.bool_
+        assert f.depth.shape == (h, w) and f.depth.dtype == np.float32
+        assert f.floor.any()  # a level camera always sees some floor
+        assert f.plan_seed == PLAN.seed
+
+
+def _read(path: str) -> np.ndarray:
+    image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    assert image is not None, path
+    return image
+
+
+@pytest.mark.gl
+def test_write_round_trips(tmp_path: pathlib.Path) -> None:
+    poses = datagen.sample_poses(PLAN, 2, np.random.default_rng(0))
+    frames = list(datagen.render_frames(PLAN, poses))
+    for f in frames:
+        datagen.write_frame(f, tmp_path)
+    lines = (tmp_path / "meta.jsonl").read_text().splitlines()
+    assert len(lines) == 2
+    meta = json.loads(lines[1])
+    f = frames[1]
+    assert meta["plan_seed"] == PLAN.seed and meta["index"] == f.index
+    assert meta["pose"] == pytest.approx([f.pose.x, f.pose.y, f.pose.yaw])
+    stem = tmp_path / meta["stem"]
+    rgb = cv2.cvtColor(_read(f"{stem}_rgb.png"), cv2.COLOR_BGR2RGB)
+    np.testing.assert_array_equal(rgb, f.rgb)
+    floor = _read(f"{stem}_floor.png") > 0
+    np.testing.assert_array_equal(floor, f.floor)
+    depth_mm = _read(f"{stem}_depth.png")
+    assert depth_mm.dtype == np.uint16
+    # Millimetres: within half a millimetre of the float depth.
+    np.testing.assert_allclose(depth_mm / 1000, f.depth, atol=5e-4)
