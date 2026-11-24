@@ -40,6 +40,10 @@ extend-exclude = [
 # UP modern syntax, B likely bugs, SIM simplifications.
 select = ["E", "F", "W", "I", "N", "D", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+# Our ROS packages sort with minifsd, after the ROS imports.
+known-first-party = ["minifsd", "mini_fsd*"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
