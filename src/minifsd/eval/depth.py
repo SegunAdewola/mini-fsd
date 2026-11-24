@@ -16,7 +16,7 @@ import argparse
 import dataclasses
 import pathlib
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import Protocol
 
 import numpy as np
@@ -57,7 +57,7 @@ class DepthResult:
 
 
 def evaluate_depth(
-    samples: Sequence[DepthSample],
+    samples: Iterable[DepthSample],
     predict: Callable[[np.ndarray], np.ndarray],
     global_fit: depth_align.Fit,
 ) -> DepthResult:
@@ -74,8 +74,6 @@ def evaluate_depth(
     Raises:
         ValueError: If there are no samples.
     """
-    if not samples:
-        raise ValueError("no samples")
     local: list[tuple[float, float]] = []
     fixed: list[tuple[float, float]] = []
     times: list[float] = []
@@ -94,13 +92,15 @@ def evaluate_depth(
             (metrics.abs_rel(shared, s.depth), metrics.delta1(shared, s.depth))
         )
         per_image.append((s.index, local[-1][0]))
+    if not times:
+        raise ValueError("no samples")
 
     def mean(rows: list[tuple[float, float]]) -> Scores:
         a = np.array(rows)
         return Scores(float(a[:, 0].mean()), float(a[:, 1].mean()))
 
     return DepthResult(
-        n_images=len(samples),
+        n_images=len(times),
         per_image_fit=mean(local),
         global_fit=mean(fixed),
         p50_ms=float(np.percentile(times, 50)),

@@ -129,3 +129,20 @@ def test_clutter_is_not_floor() -> None:
     centre = frame.depth[mjcf.IMAGE_HEIGHT // 2, mjcf.IMAGE_WIDTH // 2]
     assert centre == pytest.approx(box.x - box.half_x - pose.x, abs=0.05)
     assert not frame.floor[mjcf.IMAGE_HEIGHT // 2, mjcf.IMAGE_WIDTH // 2]
+
+
+@pytest.mark.gl
+def test_read_frames_gives_back_what_was_written(
+    tmp_path: pathlib.Path,
+) -> None:
+    poses = datagen.sample_poses(PLAN, 3, np.random.default_rng(0))
+    frames = list(datagen.render_frames(PLAN, poses))
+    for f in frames:
+        datagen.write_frame(f, tmp_path)
+    back = list(datagen.read_frames(tmp_path))
+    assert [b.index for b in back] == [0, 1, 2]
+    for f, b in zip(frames, back, strict=True):
+        np.testing.assert_array_equal(b.rgb, f.rgb)
+        np.testing.assert_array_equal(b.floor, f.floor)
+        np.testing.assert_allclose(b.depth, f.depth, atol=5e-4)
+        assert b.labeled.all()  # every sim pixel is labelled

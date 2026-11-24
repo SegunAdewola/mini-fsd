@@ -194,6 +194,55 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         f.write(json.dumps(meta) + "\n")
 
 
+@dataclasses.dataclass(frozen=True, eq=False)
+class StoredFrame:
+    """A frame read back from disk, shaped like nyuv2.Sample for the evals."""
+
+    index: int  # line number in meta.jsonl
+    stem: str
+    rgb: np.ndarray  # (H, W, 3) uint8
+    depth: np.ndarray  # (H, W) float32 metres
+    floor: np.ndarray  # (H, W) bool
+    labeled: np.ndarray  # (H, W) bool, all True: the renderer labels everything
+
+
+def read_frames(folder: pathlib.Path) -> Iterator[StoredFrame]:
+    """Reads a split written by write_frame, one frame at a time.
+
+    Args:
+        folder: The split's folder, holding meta.jsonl.
+
+    Yields:
+        The frames in the order they were written.
+    """
+    import cv2
+
+    def read(path: pathlib.Path) -> np.ndarray:
+        image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            raise FileNotFoundError(path)
+        return image
+
+    with (folder / "meta.jsonl").open() as lines:
+        for i, line in enumerate(lines):
+            stem = json.loads(line)["stem"]
+            rgb = cv2.cvtColor(
+                read(folder / f"{stem}_rgb.png"), cv2.COLOR_BGR2RGB
+            )
+            floor = read(folder / f"{stem}_floor.png") > 0
+            depth = (read(folder / f"{stem}_depth.png") / 1000.0).astype(
+                np.float32
+            )
+            yield StoredFrame(
+                index=i,
+                stem=stem,
+                rgb=rgb,
+                depth=depth,
+                floor=floor,
+                labeled=np.ones(floor.shape, dtype=bool),
+            )
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Renders a split: N floor plans, K frames each."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
