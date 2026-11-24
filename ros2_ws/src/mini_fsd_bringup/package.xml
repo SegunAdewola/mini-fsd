@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mini_fsd_bringup</name>
+  <version>0.1.0</version>
+  <description>Launch files and RViz config for Mini FSD.</description>
+  <maintainer email="51415200+SegunAdewola@users.noreply.github.com">Oluwasegun Adewola</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>mini_fsd_sim</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <test_depend>ament_index_python</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
