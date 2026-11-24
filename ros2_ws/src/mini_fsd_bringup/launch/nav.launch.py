@@ -1,11 +1,15 @@
 """Starts the simulator, Nav2 on the floor plan's map, and RViz.
 
-    ros2 launch mini_fsd_bringup nav.launch.py seed:=3
+    ros2 launch mini_fsd_bringup nav.launch.py seed:=3 clutter:=6
+
+clutter:=N puts N boxes in the world that are not on the map; the robot must
+see them with the camera to get around them.
 
 Send a goal with RViz's "2D Goal Pose" tool, or by room number:
     ros2 topic pub --once /mission std_msgs/String "data: 'go to room 103'"
- Localization is the sim's true
-pose (ADR 0004): map -> odom is a static identity and there is no AMCL.
+
+Localization is the sim's true pose (ADR 0004): map -> odom is a static
+identity and there is no AMCL.
 """
 
 import pathlib
@@ -74,6 +78,7 @@ def as_int(
 def generate_launch_description() -> launch.LaunchDescription:
     seed = launch.substitutions.LaunchConfiguration("seed")
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
+    clutter = launch.substitutions.LaunchConfiguration("clutter")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
 
     sim = launch.actions.IncludeLaunchDescription(
@@ -83,6 +88,7 @@ def generate_launch_description() -> launch.LaunchDescription:
         launch_arguments={
             "seed": seed,
             "rooms_per_side": rooms,
+            "clutter": clutter,
             "rviz": rviz,
             "rviz_config": str(SHARE / "rviz" / "nav.rviz"),
         }.items(),
@@ -106,6 +112,8 @@ def generate_launch_description() -> launch.LaunchDescription:
             launch.actions.DeclareLaunchArgument(
                 "rooms_per_side", default_value="4"
             ),
+            # Off the map on purpose: only the camera can see these (R10).
+            launch.actions.DeclareLaunchArgument("clutter", default_value="6"),
             launch.actions.DeclareLaunchArgument("rviz", default_value="true"),
             sim,
             # ADR 0004: the sim's odom is the true pose, so map = odom.
@@ -116,6 +124,14 @@ def generate_launch_description() -> launch.LaunchDescription:
                 arguments=["--frame-id", "map", "--child-frame-id", "odom"],
             ),
             launch.actions.OpaqueFunction(function=_map_server),
+            # Camera depth to obstacle points for the local costmap (R10).
+            launch_ros.actions.Node(
+                package="mini_fsd_perception",
+                executable="perception_node",
+                name="perception",
+                output="screen",
+                parameters=[SIM_TIME],
+            ),
             # Same seed as the sim, so room numbers match the world.
             launch_ros.actions.Node(
                 package="mini_fsd_mission",

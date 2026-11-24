@@ -17,6 +17,7 @@ import pytest
 import rclpy
 import rclpy.executors
 import rclpy.node
+import rclpy.parameter
 import rclpy.time
 import tf2_ros
 from geometry_msgs.msg import Twist, Vector3
@@ -158,3 +159,21 @@ def test_forward_command_moves_odom(h: Harness) -> None:
     assert 0.35 < dx < 0.55
     assert end.twist.twist.linear.x == pytest.approx(0.5, abs=0.05)
     assert math.isclose(end.pose.pose.position.y, 0.0, abs_tol=0.01)
+
+
+def test_clutter_parameter_puts_boxes_in_the_world() -> None:
+    rclpy.init()
+    try:
+        node = sim_node.SimNode(
+            parameter_overrides=[rclpy.parameter.Parameter("clutter", value=6)]
+        )
+        assert len(node.clutter) == 6
+        # The same seed gives the same boxes, so a rerun is the same world.
+        again = sim_node.SimNode(
+            parameter_overrides=[rclpy.parameter.Parameter("clutter", value=6)]
+        )
+        assert node.clutter == again.clutter
+        node.destroy_node()
+        again.destroy_node()
+    finally:
+        rclpy.shutdown()

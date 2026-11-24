@@ -34,6 +34,7 @@ from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Header
 
 from minifsd.geometry import frames
+from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf, sim
 
 # Frame names (REP 105). Nav2, RViz and the bringup config use these.
@@ -70,16 +71,26 @@ def _camera_info(header: Header, k: frames.Intrinsics) -> CameraInfo:
 class SimNode(rclpy.node.Node):
     """Runs one floor plan and publishes what the robot senses."""
 
-    def __init__(self) -> None:
-        """Builds the floor plan from parameters and starts publishing."""
-        super().__init__("sim")
+    def __init__(self, **kwargs: object) -> None:
+        """Builds the floor plan from parameters and starts publishing.
+
+        Args:
+            **kwargs: Passed to rclpy's Node, e.g. parameter_overrides.
+        """
+        super().__init__("sim", **kwargs)  # type: ignore[arg-type]
         seed = self.declare_parameter("seed", 0).value
         rooms = self.declare_parameter("rooms_per_side", 4).value
+        # Boxes in the world but not on Nav2's map (minifsd.world.clutter).
+        n_clutter = self.declare_parameter("clutter", 0).value
         rate_hz = self.declare_parameter("rate_hz", 20.0).value
         self._dt = 1.0 / rate_hz
 
         plan = floor_plan.generate_floor_plan(seed, rooms_per_side=rooms)
-        self._sim = sim.Sim(plan)
+        # Seeded from the floor plan's seed, so a rerun is the same world.
+        self.clutter = clutter_lib.generate_clutter(
+            plan, n_clutter, np.random.default_rng([seed, 2])
+        )
+        self._sim = sim.Sim(plan, clutter=self.clutter)
         self._intrinsics = frames.intrinsics_from_fovy(
             mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, mjcf.FOVY_DEG
         )
@@ -105,7 +116,8 @@ class SimNode(rclpy.node.Node):
         self.create_subscription(Twist, "cmd_vel", self._on_cmd_vel, 10)
         self.create_timer(self._dt, self._tick)
         self.get_logger().info(
-            f"floor plan seed {seed}, {rooms} rooms per side, {rate_hz} Hz"
+            f"floor plan seed {seed}, {rooms} rooms per side, "
+            f"{len(self.clutter)} clutter boxes, {rate_hz} Hz"
         )
 
     def _on_cmd_vel(self, msg: Twist) -> None:

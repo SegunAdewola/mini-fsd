@@ -126,3 +126,44 @@ def test_cmd_vel_is_unstamped() -> None:
     for server in ("controller_server", "behavior_server"):
         p = _params()[server]["ros__parameters"]
         assert p["enable_stamped_cmd_vel"] is False
+
+
+def test_starts_the_perception_node() -> None:
+    names = [(n.node_package, n.node_executable) for n in _nodes()]
+    assert ("mini_fsd_perception", "perception_node") in names
+
+
+@pytest.mark.parametrize("costmap", ["local_costmap", "global_costmap"])
+def test_costmaps_mark_the_camera_obstacles(costmap: str) -> None:
+    # Both: the local one so MPPI won't drive into a box, the global one so
+    # the planner replans around it. With the local one only, the robot
+    # stalled in front of a box its global path ran through (2026-11-24).
+    p = _params()[costmap][costmap]["ros__parameters"]
+    # Order matters: static first, inflation last so it inflates both.
+    assert p["plugins"] == ["static_layer", "obstacle_layer", "inflation_layer"]
+    layer = p["obstacle_layer"]
+    assert layer["plugin"] == "nav2_costmap_2d::ObstacleLayer"
+    (source,) = layer["observation_sources"].split()
+    obs = layer[source]
+    assert obs["topic"] == "/camera/obstacles"
+    assert obs["data_type"] == "PointCloud2"
+    assert obs["marking"] is True and obs["clearing"] is True
+
+
+def test_bt_waits_long_enough_for_a_busy_controller() -> None:
+    # With sim, rendering, MPPI and perception on one 8 GB laptop, the
+    # default 20 ms wait for the controller to accept a new path aborted
+    # goals the robot was about to reach (R10 log, 2026-11-24).
+    p = _params()["bt_navigator"]["ros__parameters"]
+    assert p["default_server_timeout"] >= 200  # milliseconds
+
+
+def test_nav_launch_adds_clutter_by_default() -> None:
+    args = {
+        e.name: e.default_value
+        for e in _description().entities
+        if isinstance(e, launch.actions.DeclareLaunchArgument)
+    }
+    assert "clutter" in args
+    (default,) = args["clutter"]  # a list of substitutions
+    assert int(default.perform(launch.LaunchContext())) > 0

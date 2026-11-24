@@ -21,6 +21,7 @@ def generate_launch_description() -> launch.LaunchDescription:
     share = pathlib.Path(get_package_share_directory("mini_fsd_bringup"))
     seed = launch.substitutions.LaunchConfiguration("seed")
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
+    clutter = launch.substitutions.LaunchConfiguration("clutter")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
     rviz_config = launch.substitutions.LaunchConfiguration("rviz_config")
 
@@ -39,6 +40,11 @@ def generate_launch_description() -> launch.LaunchDescription:
                 "rooms_per_side", default_value="4"
             ),
             launch.actions.DeclareLaunchArgument(
+                "clutter",
+                default_value="0",
+                description="Boxes in the world but not on the map",
+            ),
+            launch.actions.DeclareLaunchArgument(
                 "rviz", default_value="true", description="Start RViz"
             ),
             launch.actions.DeclareLaunchArgument(
@@ -53,7 +59,11 @@ def generate_launch_description() -> launch.LaunchDescription:
                 output="screen",
                 # No use_sim_time here: this node publishes /clock.
                 parameters=[
-                    {"seed": as_int(seed), "rooms_per_side": as_int(rooms)}
+                    {
+                        "seed": as_int(seed),
+                        "rooms_per_side": as_int(rooms),
+                        "clutter": as_int(clutter),
+                    }
                 ],
             ),
             launch_ros.actions.Node(
