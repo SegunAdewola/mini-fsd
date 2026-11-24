@@ -156,6 +156,11 @@ end. Big integration problems show up now, not in December.
 - [ ] V8 `[CV]` feat(demo): `minifsd.demo` CLI, folder of images in, overlay
   images out (classical floor baseline for now). Test: two input images give two
   output files of the same size.
+- [x] V9 `[CV]` feat(perception): input-size sweep for Depth Anything V2 Small
+  through the harness (`--input-size`), the first accuracy vs latency curve.
+  Added after V6 showed the model at 20 times the budget. Test: any multiple of
+  14 works as the short side and keeps the aspect ratio (property); the size
+  shows in the candidate's name.
 
 ### Robot track
 
@@ -387,3 +392,13 @@ Add a row at the end of each session.
   size, export to ONNX and quantise, or use a distilled head. On 50 sim val
   frames (fit on 100 sim train frames): AbsRel 0.050 with the per-image oracle,
   0.357 with one global fit.
+- **2026-11-24** V9 input-size sweep, added to the plan after V6. The sim camera
+  is 320 x 240, so the default 518 px input upsamples each frame 2.2 times. On
+  50 sim val frames, 2 CPU threads, short side vs per-image AbsRel and p50: 518
+  px 0.050, 938 ms; 364 px 0.061, 364 ms; 266 px 0.045, 186 ms; 238 px 0.048,
+  149 ms; 210 px 0.063, 125 ms; 154 px 0.071, 78 ms. Near native size (238 px,
+  17 x 23 patches against 37 x 49) is as accurate as 518 px and 6.3 times
+  faster. Differences below about 0.01 are within noise for 50 frames. Even 154
+  px misses the 50 ms budget, so size alone won't do it; ONNX, INT8 or a
+  distilled head is still needed (E3, E6). The global-fit AbsRel stays near 0.35
+  at every size, which is a scale problem, not a resolution one.
