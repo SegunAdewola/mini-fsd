@@ -22,6 +22,7 @@ def generate_launch_description() -> launch.LaunchDescription:
     seed = launch.substitutions.LaunchConfiguration("seed")
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
+    rviz_config = launch.substitutions.LaunchConfiguration("rviz_config")
 
     def as_int(value: launch.substitutions.LaunchConfiguration) -> object:
         # Launch arguments are strings; the node declares these as integers.
@@ -40,6 +41,11 @@ def generate_launch_description() -> launch.LaunchDescription:
             launch.actions.DeclareLaunchArgument(
                 "rviz", default_value="true", description="Start RViz"
             ),
+            launch.actions.DeclareLaunchArgument(
+                "rviz_config",
+                default_value=str(share / "rviz" / "sim.rviz"),
+                description="RViz config file (nav.launch.py passes nav.rviz)",
+            ),
             launch_ros.actions.Node(
                 package="mini_fsd_sim",
                 executable="sim_node",
@@ -54,7 +60,7 @@ def generate_launch_description() -> launch.LaunchDescription:
                 package="rviz2",
                 executable="rviz2",
                 name="rviz",
-                arguments=["-d", str(share / "rviz" / "sim.rviz")],
+                arguments=["-d", rviz_config],
                 parameters=[{"use_sim_time": True}],
                 condition=launch.conditions.IfCondition(rviz),
             ),

@@ -1,10 +1,11 @@
 # Project environments. `pixi install` builds them into .pixi/ from pixi.lock.
 # Specs here are loose on purpose; pixi.lock pins every exact version.
 #
-# Three environments:
+# Four environments:
 #   default  ROS 2 plus everything below. What you use day to day.
 #   core     The minifsd package and its tests, without ROS (ADR 0003). CI
 #            tests here, so a ROS import in src/minifsd fails the build.
+#   cv       core plus torch and transformers, for models (V5, M3).
 #   lint     Only the lint/format tools. Small and quick to install, so the
 #            git hooks and the CI lint job don't need the ROS install.
 
@@ -49,8 +50,9 @@ ninja = "*"
 # --editable`, which setuptools 80+ rejects. Edits need a rebuild (about 4 s);
 # test-ros and sim depend on build, so pixi does it for you.
 build = { cmd = "colcon build", cwd = "ros2_ws" }
-# Works once the bringup package exists (step R6).
 sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
+# Sim plus Nav2: send goals with RViz's "2D Goal Pose" tool (R8).
+nav = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup nav.launch.py'", depends-on = ["build"] }
 teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
 # ROS node smoke tests. Local only: CI has no ROS env and no GPU.
 test-ros = { cmd = "colcon test --event-handlers console_direct+ && colcon test-result --verbose", cwd = "ros2_ws", depends-on = ["build"] }
@@ -73,6 +75,15 @@ minifsd = { path = ".", editable = true }   # our package (ADR 0003)
 [feature.core.tasks]
 test = "pytest"
 typecheck = "mypy"
+
+# Torch for running and training models (V5, M3). Its own env, so the ROS
+# env stays small and torch can't clash with RoboStack's pins. All from
+# conda-forge, so numpy, OpenCV and torch share one OpenMP library (PyPI torch
+# bundles its own libomp, and two copies in one process can crash). Colab and
+# Explorer pip-install the same torch version.
+[feature.cv.dependencies]
+pytorch = "2.14.*"
+transformers = "*"   # Depth Anything V2 and other Hugging Face models
 
 # Lint and format tools (ADR 0005).
 [feature.lint.dependencies]
@@ -99,4 +110,5 @@ vale-sync = "vale sync"
 [environments]
 default = ["core", "lint"]
 core = { features = ["core"], no-default-feature = true }
+cv = { features = ["core", "cv"], no-default-feature = true }
 lint = { features = ["lint"], no-default-feature = true }

@@ -18,6 +18,7 @@ Run it with: ros2 run mini_fsd_sim sim_node --ros-args -p seed:=0
 
 import numpy as np
 import rclpy
+import rclpy.executors
 import rclpy.node
 import tf2_ros
 from builtin_interfaces.msg import Time
@@ -204,8 +205,9 @@ def main() -> None:
     node = SimNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass  # Ctrl-C is the normal way to stop it
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+        # Ctrl-C, or `ros2 launch` stopping its nodes: the normal ways out.
+        pass
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

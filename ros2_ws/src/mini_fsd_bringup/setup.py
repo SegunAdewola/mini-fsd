@@ -16,6 +16,7 @@ setup(
         # `ros2 launch` and the tests find these under share/<package>/.
         (f"share/{PACKAGE}/launch", glob.glob("launch/*.launch.py")),
         (f"share/{PACKAGE}/rviz", glob.glob("rviz/*.rviz")),
+        (f"share/{PACKAGE}/config", glob.glob("config/*.yaml")),
     ],
     install_requires=["setuptools"],
     # colcon test runs pytest only if it is listed here.
