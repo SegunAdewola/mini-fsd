@@ -146,7 +146,7 @@ end. Big integration problems show up now, not in December.
   Needs the pixi `cv` environment (torch, transformers); discuss before adding.
   Test: output shape and dtype on one image; AbsRel below a loose bound on 20
   images.
-- [ ] V6 `[CV]` feat(eval): `minifsd.eval.harness` CLI. Any candidate on any
+- [x] V6 `[CV]` feat(eval): `minifsd.eval.harness` CLI. Any candidate on any
   split gives accuracy plus p50 and p95 latency and peak memory under a thread
   cap. Test: a fake candidate with known output and a fixed sleep gives the
   expected metric and a latency within tolerance.
@@ -378,3 +378,12 @@ Add a row at the end of each session.
   two hallway boxes and succeeded in 33 s; closest gap 0.06 m (the box is seen
   late). Limitation for the report: a level camera 0.5 m up can't see the floor
   nearer than about 1.07 m, so low boxes leave view up close.
+- **2026-11-24** V6 harness. OpenCV on macOS uses GCD threading, which can only
+  run on 1 thread or all of them, so under any thread cap OpenCV runs
+  single-threaded (never over budget; the classical baseline goes from 1.5 to
+  3.2 ms). The harness reproduces V3's train IoU (0.278). First budget number:
+  Depth Anything V2 Small at 518 px on 2 CPU threads takes 992 / 1672 ms p50 /
+  p95 and 1.1 GB, about 20 times the 50 ms budget, so E3 and E6 must cut input
+  size, export to ONNX and quantise, or use a distilled head. On 50 sim val
+  frames (fit on 100 sim train frames): AbsRel 0.050 with the per-image oracle,
+  0.357 with one global fit.
