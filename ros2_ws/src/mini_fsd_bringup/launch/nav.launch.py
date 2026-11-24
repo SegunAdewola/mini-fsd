@@ -2,7 +2,9 @@
 
     ros2 launch mini_fsd_bringup nav.launch.py seed:=3
 
-Send a goal with RViz's "2D Goal Pose" tool. Localization is the sim's true
+Send a goal with RViz's "2D Goal Pose" tool, or by room number:
+    ros2 topic pub --once /mission std_msgs/String "data: 'go to room 103'"
+ Localization is the sim's true
 pose (ADR 0004): map -> odom is a static identity and there is no AMCL.
 """
 
@@ -15,6 +17,7 @@ import launch.conditions
 import launch.launch_description_sources
 import launch.substitutions
 import launch_ros.actions
+import launch_ros.parameter_descriptions
 from ament_index_python.packages import get_package_share_directory
 
 from minifsd.world import floor_plan, occupancy
@@ -57,6 +60,15 @@ def _map_server(
             parameters=[PARAMS, SIM_TIME, {"yaml_filename": str(yaml_path)}],
         )
     ]
+
+
+def as_int(
+    value: launch.substitutions.LaunchConfiguration,
+) -> launch_ros.parameter_descriptions.ParameterValue:
+    """Launch arguments are strings; the nodes declare these as integers."""
+    return launch_ros.parameter_descriptions.ParameterValue(
+        value, value_type=int
+    )
 
 
 def generate_launch_description() -> launch.LaunchDescription:
@@ -104,6 +116,17 @@ def generate_launch_description() -> launch.LaunchDescription:
                 arguments=["--frame-id", "map", "--child-frame-id", "odom"],
             ),
             launch.actions.OpaqueFunction(function=_map_server),
+            # Same seed as the sim, so room numbers match the world.
+            launch_ros.actions.Node(
+                package="mini_fsd_mission",
+                executable="mission_node",
+                name="mission",
+                output="screen",
+                parameters=[
+                    SIM_TIME,
+                    {"seed": as_int(seed), "rooms_per_side": as_int(rooms)},
+                ],
+            ),
             *servers,
             launch_ros.actions.Node(
                 package="nav2_lifecycle_manager",

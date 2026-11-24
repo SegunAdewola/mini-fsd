@@ -72,6 +72,11 @@ def test_starts_the_nav2_servers_and_their_lifecycle_manager() -> None:
     assert "lifecycle_manager" in executables
 
 
+def test_starts_the_mission_node() -> None:
+    names = [(n.node_package, n.node_executable) for n in _nodes()]
+    assert ("mini_fsd_mission", "mission_node") in names
+
+
 def test_map_is_the_sims_floor_plan() -> None:
     yaml_path = _module().write_map(seed=7, rooms_per_side=2)
     assert yaml_path.name == "seed_7.yaml"
