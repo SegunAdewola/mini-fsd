@@ -104,3 +104,28 @@ def test_write_round_trips(tmp_path: pathlib.Path) -> None:
     assert depth_mm.dtype == np.uint16
     # Millimetres: within half a millimetre of the float depth.
     np.testing.assert_allclose(depth_mm / 1000, f.depth, atol=5e-4)
+
+
+def test_poses_stay_clear_of_clutter() -> None:
+    from minifsd.world import clutter
+
+    plan = floor_plan.generate_floor_plan(seed=1, rooms_per_side=4)
+    boxes = clutter.generate_clutter(plan, 8, np.random.default_rng(1))
+    poses = datagen.sample_poses(plan, 200, np.random.default_rng(2), boxes)
+    for p in poses:
+        for b in boxes:
+            assert not clutter.contains(b, p.x, p.y, datagen.CLEARANCE - 0.05)
+
+
+@pytest.mark.gl
+def test_clutter_is_not_floor() -> None:
+    from minifsd.world import clutter
+
+    # A box straight ahead of the camera: the centre pixel sees its near
+    # face, 1.2 m away, and is not floor.
+    box = clutter.Box(2.5, 0.0, 0.0, 0.3, 0.6, 1.0, (0.5, 0.4, 0.3, 1.0))
+    pose = floor_plan.Pose2D(1.0, 0.0, 0.0)
+    (frame,) = datagen.render_frames(PLAN, [pose], (box,))
+    centre = frame.depth[mjcf.IMAGE_HEIGHT // 2, mjcf.IMAGE_WIDTH // 2]
+    assert centre == pytest.approx(box.x - box.half_x - pose.x, abs=0.05)
+    assert not frame.floor[mjcf.IMAGE_HEIGHT // 2, mjcf.IMAGE_WIDTH // 2]

@@ -11,8 +11,14 @@ module constants, so a rename breaks the tests here, not inside ROS.
 """
 
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
+from minifsd.geometry import frames
 from minifsd.world import floor_plan
+
+if TYPE_CHECKING:  # clutter imports this module, so only for type hints
+    from minifsd.world import clutter as clutter_lib
 
 SPAWN_KEY = "spawn"
 JOINTS = ("base_x", "base_y", "base_yaw")
@@ -52,11 +58,17 @@ def _fmt(*values: float) -> str:
     return " ".join(repr(float(v)) for v in values)
 
 
-def build_mjcf(plan: floor_plan.FloorPlan) -> str:
+def build_mjcf(
+    plan: floor_plan.FloorPlan,
+    clutter: Sequence["clutter_lib.Box"] = (),
+) -> str:
     """Returns MJCF XML for the floor plan with the robot at its spawn.
 
     Args:
         plan: The floor plan to build.
+        clutter: Boxes to stand on the floor. They are solid (the robot
+            collides with them) but are not part of the floor plan, so they
+            stay off Nav2's map.
 
     Returns:
         The model as an XML string, ready for mujoco.MjModel.from_xml_string.
@@ -191,6 +203,20 @@ def build_mjcf(plan: floor_plan.FloorPlan) -> str:
             rgba=_fmt(*SIGN_RGBA),
             contype="0",
             conaffinity="0",
+        )
+
+    for i, box in enumerate(clutter):
+        # MuJoCo quaternions are (w, x, y, z); ours are ROS order (x, y, z, w).
+        q = frames.yaw_to_quaternion(box.yaw)
+        ET.SubElement(
+            world,
+            "geom",
+            name=f"clutter_{i}",
+            type="box",
+            size=_fmt(box.half_x, box.half_y, box.height / 2),
+            pos=_fmt(box.x, box.y, box.height / 2),
+            quat=_fmt(q.w, q.x, q.y, q.z),
+            rgba=_fmt(*box.rgba),
         )
 
     _add_robot(world)

@@ -10,8 +10,9 @@ Splits are by floor plan: train, val and test draw seeds from disjoint
 ranges, so no layout is in two splits and a model can't score well on val by
 remembering a floor it trained on.
 
-This is the plain version: fixed camera height and textures. Domain
-randomization (camera height, textures, lighting, distractors) is M2.
+Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
+distractors. Camera height, textures and lighting are still fixed; the rest
+of domain randomization is M2.
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -31,6 +32,7 @@ import numpy as np
 from scipy import ndimage
 
 from minifsd.geometry import frames
+from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf, occupancy, sim
 
 # Camera positions at least this far from any wall: the robot's radius
@@ -76,7 +78,10 @@ def seeds_for(split: str, n: int) -> list[int]:
 
 
 def sample_poses(
-    plan: floor_plan.FloorPlan, n: int, rng: np.random.Generator
+    plan: floor_plan.FloorPlan,
+    n: int,
+    rng: np.random.Generator,
+    clutter: Sequence[clutter_lib.Box] = (),
 ) -> list[floor_plan.Pose2D]:
     """Random poses inside the building, at least CLEARANCE from walls.
 
@@ -84,6 +89,7 @@ def sample_poses(
         plan: The floor plan.
         n: How many poses.
         rng: The random source; the same state gives the same poses.
+        clutter: Boxes to keep CLEARANCE from, too.
 
     Returns:
         n poses at cell centres of the occupancy grid, with any yaw.
@@ -99,7 +105,18 @@ def sample_poses(
     regions, _ = ndimage.label(free)
     row, col = grid.world_to_cell(plan.spawn.x, plan.spawn.y)
     inside = regions == regions[row, col]
-    rows, cols = np.nonzero(inside & (clear >= CLEARANCE))
+    ok = inside & (clear >= CLEARANCE)
+    if clutter:
+        cols_x = (
+            grid.origin_x + (np.arange(ok.shape[1]) + 0.5) * grid.resolution
+        )
+        rows_y = (
+            grid.origin_y + (np.arange(ok.shape[0]) + 0.5) * grid.resolution
+        )
+        xs, ys = np.meshgrid(cols_x, rows_y)
+        for box in clutter:
+            ok &= ~clutter_lib.covers(box, xs, ys, CLEARANCE)
+    rows, cols = np.nonzero(ok)
     picks = rng.choice(len(rows), size=n, replace=len(rows) < n)
     poses = []
     for i in picks:
@@ -110,18 +127,21 @@ def sample_poses(
 
 
 def render_frames(
-    plan: floor_plan.FloorPlan, poses: Sequence[floor_plan.Pose2D]
+    plan: floor_plan.FloorPlan,
+    poses: Sequence[floor_plan.Pose2D],
+    clutter: Sequence[clutter_lib.Box] = (),
 ) -> Iterator[Frame]:
     """Renders one frame per pose.
 
     Args:
         plan: The floor plan.
         poses: Where to put the robot.
+        clutter: Boxes standing in the world (distractors).
 
     Yields:
         The frames, in pose order.
     """
-    s = sim.Sim(plan)
+    s = sim.Sim(plan, clutter=clutter)
     try:
         for i, pose in enumerate(poses):
             s.set_pose(pose)
@@ -180,6 +200,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--split", choices=SPLITS, default="train")
     parser.add_argument("--plans", type=int, default=10)
     parser.add_argument("--frames-per-plan", type=int, default=20)
+    parser.add_argument(
+        "--clutter", type=int, default=6, help="boxes per floor plan"
+    )
     parser.add_argument("--out", default="data/sim/v7", type=pathlib.Path)
     args = parser.parse_args(argv)
 
@@ -191,9 +214,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         # Layout size varies with the seed too, from 2 to 6 rooms a side.
         rooms = int(np.random.default_rng([seed, 0]).integers(2, 7))
         plan = floor_plan.generate_floor_plan(seed, rooms_per_side=rooms)
+        boxes = clutter_lib.generate_clutter(
+            plan, args.clutter, np.random.default_rng([seed, 2])
+        )
         rng = np.random.default_rng([seed, 1])
-        poses = sample_poses(plan, args.frames_per_plan, rng)
-        for frame in render_frames(plan, poses):
+        poses = sample_poses(plan, args.frames_per_plan, rng, boxes)
+        for frame in render_frames(plan, poses, boxes):
             write_frame(frame, out)
             total += 1
     print(f"{total} frames from {args.plans} plans in {out}/")

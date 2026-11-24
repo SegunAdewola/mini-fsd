@@ -146,3 +146,19 @@ def test_ceiling_covers_the_floor_plan_at_wall_height() -> None:
     assert ceiling.pos[1] + ceiling.size[1] >= max(ys) - eps
     # Visual only: the robot can't reach it anyway.
     assert ceiling.contype[0] == 0 and ceiling.conaffinity[0] == 0
+
+
+def test_clutter_boxes_are_solid_and_turned_by_their_yaw() -> None:
+    from minifsd.world import clutter
+
+    box = clutter.Box(3.0, 0.2, 0.7, 0.4, 0.25, 0.6, (0.4, 0.3, 0.2, 1.0))
+    model = mujoco.MjModel.from_xml_string(mjcf.build_mjcf(PLAN, (box,)))
+    data = _at_spawn(model)
+    geom = model.geom("clutter_0")
+    np.testing.assert_allclose(geom.size, [0.4, 0.25, 0.3])
+    np.testing.assert_allclose(geom.pos, [3.0, 0.2, 0.3])
+    # The box's own x axis points along its yaw. MuJoCo stores quaternions
+    # as (w, x, y, z), so a wrong order would turn it the wrong way.
+    x_axis = data.geom("clutter_0").xmat.reshape(3, 3)[:, 0]
+    np.testing.assert_allclose(x_axis, [np.cos(0.7), np.sin(0.7), 0], atol=1e-9)
+    assert geom.contype[0] == 1 and geom.conaffinity[0] == 1  # robot hits it

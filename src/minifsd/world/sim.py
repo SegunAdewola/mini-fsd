@@ -9,10 +9,12 @@ always sees the same result however fast the machine is.
 """
 
 import math
+from collections.abc import Sequence
 
 import mujoco
 import numpy as np
 
+from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf
 
 # Stop if no command arrives for this long. teleop and Nav2 both resend
@@ -50,15 +52,20 @@ class Sim:
         self,
         plan: floor_plan.FloorPlan,
         watchdog_timeout: float = WATCHDOG_TIMEOUT,
+        clutter: Sequence[clutter_lib.Box] = (),
     ) -> None:
         """Builds the model and puts the robot at the plan's spawn pose.
 
         Args:
             plan: The floor plan to simulate.
             watchdog_timeout: Seconds without a command before stopping.
+            clutter: Boxes in the world but not in the floor plan.
         """
         self.plan = plan
-        self.model = mujoco.MjModel.from_xml_string(mjcf.build_mjcf(plan))
+        self.clutter = tuple(clutter)
+        self.model = mujoco.MjModel.from_xml_string(
+            mjcf.build_mjcf(plan, self.clutter)
+        )
         self.data = mujoco.MjData(self.model)
         spawn = self.model.key(mjcf.SPAWN_KEY).id
         mujoco.mj_resetDataKeyframe(self.model, self.data, spawn)

@@ -192,3 +192,12 @@ def test_floor_is_lit_under_the_ceiling(s: sim.Sim) -> None:
     # pixels should average well above black.
     rgb, mask = s.render_rgb(), s.render_floor_mask()
     assert rgb[mask].mean() > 60
+
+
+def test_clutter_blocks_the_robot() -> None:
+    from minifsd.world import clutter
+
+    box = clutter.Box(4.0, 0.0, 0.0, 0.3, 0.3, 0.6, (0.4, 0.3, 0.2, 1.0))
+    s = sim.Sim(PLAN, clutter=(box,))
+    _drive(s, 1.0, 0.0, 6.0)
+    assert s.pose().x < box.x - box.half_x - mjcf.ROBOT_RADIUS + 0.02
