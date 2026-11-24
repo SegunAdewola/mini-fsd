@@ -319,3 +319,7 @@ Add a row at the end of each session.
   the macOS runners are VMs with no GPU. Render tests carry a `gl` marker that
   CI deselects; they run locally before each commit. Linux render CI is a
   follow-up.
+- **2026-11-23** R5: `colcon build --symlink-install` fails with setuptools 80+
+  (`option --editable not recognized`). The build task drops the flag instead of
+  pinning an old setuptools; a rebuild takes about 4 s and the ROS tasks rebuild
+  first.

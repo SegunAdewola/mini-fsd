@@ -45,10 +45,15 @@ make = "*"
 ninja = "*"
 
 [tasks]
-build = { cmd = "colcon build --symlink-install", cwd = "ros2_ws" }
+# No --symlink-install: for Python packages it runs `setup.py develop
+# --editable`, which setuptools 80+ rejects. Edits need a rebuild (about 4 s);
+# test-ros and sim depend on build, so pixi does it for you.
+build = { cmd = "colcon build", cwd = "ros2_ws" }
 # Works once the bringup package exists (step R6).
 sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
 teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
+# ROS node smoke tests. Local only: CI has no ROS env and no GPU.
+test-ros = { cmd = "colcon test --event-handlers console_direct+ && colcon test-result --verbose", cwd = "ros2_ws", depends-on = ["build"] }
 
 # The ROS-free core: our package, its libraries and test tools (ADR 0003).
 [feature.core.dependencies]
