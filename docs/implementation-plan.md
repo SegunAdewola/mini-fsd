@@ -150,7 +150,7 @@ end. Big integration problems show up now, not in December.
   split gives accuracy plus p50 and p95 latency and peak memory under a thread
   cap. Test: a fake candidate with known output and a fixed sleep gives the
   expected metric and a latency within tolerance.
-- [ ] V7 `[CV]` feat(data): `minifsd.data.datagen` renders RGB, floor mask and
+- [x] V7 `[CV]` feat(data): `minifsd.data.datagen` renders RGB, floor mask and
   depth from the sim (needs R3), split by floor-plan seed. Test: no seed in two
   splits (property); mask and depth line up with the RGB frame.
 - [ ] V8 `[CV]` feat(demo): `minifsd.demo` CLI, folder of images in, overlay
@@ -347,3 +347,11 @@ Add a row at the end of each session.
   Preprocessing is our own (OpenCV), shared with the ONNX path. Weights are
   fetched by hand into `data/models/` (the Hugging Face Xet download stalled)
   and checked by SHA-256.
+- **2026-11-24** V7: floor masks come from MuJoCo's segmentation rendering, so
+  labels are exact. The model gained a ceiling (without one the camera saw sky
+  above the walls beyond about 4 m) and directional, shadowless lights (the old
+  lights sat above the new ceiling and left the floor black). A ground-plane
+  test checks the floor mask, the depth and the R4 intrinsics against each other
+  within 2%. 100 frames take about 8 s and 5.7 MB, so 10k frames is about 15 min
+  and 0.6 GB. Many uniform poses face a nearby wall; M2 should bias poses toward
+  open views and add ambient light for the ceiling.
