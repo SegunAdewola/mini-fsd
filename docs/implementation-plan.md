@@ -193,7 +193,7 @@ end. Big integration problems show up now, not in December.
   103" to a pose in front of that door) and `mission_node` sending
   `NavigateToPose`. Test: every room in a layout resolves (property); unknown
   rooms raise.
-- [ ] R10 `[R]` feat(perception): `perception_node` stub, depth image to
+- [x] R10 `[R]` feat(perception): `perception_node` stub, depth image to
   PointCloud2 in the robot frame, into the local costmap. Reuses V4's
   projection. Test: a pixel's point projects back to that pixel (property);
   obstacles appear in the costmap in RViz.
@@ -355,3 +355,26 @@ Add a row at the end of each session.
   within 2%. 100 frames take about 8 s and 5.7 MB, so 10k frames is about 15 min
   and 0.6 GB. Many uniform poses face a nearby wall; M2 should bias poses toward
   open views and add ambient light for the ceiling.
+- **2026-11-24** R10: the projection half of V4 (`minifsd.geometry.camera`,
+  back-project and project) was built here because R10 needs it; V4 keeps the
+  calibration. `perception_node` takes intrinsics from CameraInfo and the camera
+  pose from TF, so M4 can feed it model depth unchanged. Obstacle points are cut
+  to 0.05 to 1.0 m above the floor and 5 m out. With perception on, Nav2's BT
+  aborted a goal the robot was about to reach: its 20 ms wait for the controller
+  was too short on the loaded 8 GB M1; raised to 200 ms, then two room goals in
+  a row succeeded. Avoiding unmapped obstacles needs clutter in the world (next,
+  with M2's distractors).
+- **2026-11-24** Final environment: the generated floor plans stay the main
+  environment for training and every navigation number. The campus twin (floors
+  2, 14, 15) is a stretch goal after M4, one floor first; the real photos are
+  the link to the campus either way.
+- **2026-11-24** Clutter (`minifsd.world.clutter`): furniture-sized boxes that
+  are solid in MuJoCo but left off Nav2's map, so only the camera can find them.
+  Placement never overlaps walls, keeps 1 m around spawn and keeps every room
+  goal reachable with 0.35 m clearance. The data engine uses it as distractors.
+  The first dodge run stalled: the global costmap had the static map only, so
+  the planner kept a path through a box that MPPI could not bend around. With
+  the camera's obstacle layer in the global costmap too, "go to room 108" passed
+  two hallway boxes and succeeded in 33 s; closest gap 0.06 m (the box is seen
+  late). Limitation for the report: a level camera 0.5 m up can't see the floor
+  nearer than about 1.07 m, so low boxes leave view up close.
