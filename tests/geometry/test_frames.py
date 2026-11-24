@@ -124,3 +124,17 @@ def test_rejects_bad_field_of_view() -> None:
         frames.intrinsics_from_fovy(320, 240, 0.0)
     with pytest.raises(ValueError):
         frames.intrinsics_from_fovy(320, 240, 180.0)
+
+
+@given(YAWS)
+def test_matrix_round_trips_through_a_quaternion(yaw: float) -> None:
+    m = frames.quaternion_to_matrix(frames.yaw_to_quaternion(yaw))
+    np.testing.assert_allclose(m, _yaw_matrix(yaw), atol=1e-9)
+
+
+def test_optical_quaternion_gives_the_optical_matrix() -> None:
+    np.testing.assert_allclose(
+        frames.quaternion_to_matrix(frames.OPTICAL_TO_BASE_QUAT),
+        frames.OPTICAL_TO_BASE,
+        atol=1e-12,
+    )

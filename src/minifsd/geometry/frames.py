@@ -102,6 +102,26 @@ def quaternion_from_matrix(m: np.ndarray) -> Quaternion:
     return Quaternion(float(x), float(y), float(z), float(w))
 
 
+def quaternion_to_matrix(q: Quaternion) -> np.ndarray:
+    """The 3x3 rotation matrix of a unit quaternion.
+
+    Args:
+        q: A unit quaternion, (x, y, z, w).
+
+    Returns:
+        R such that R @ v rotates v. For a TF transform parent -> child,
+        R takes child coordinates to parent coordinates.
+    """
+    x, y, z, w = q
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ]
+    )
+
+
 # Rotation from the camera's optical frame to the camera's body frame (which
 # has the base's axes: x forward, y left, z up). Column i is optical axis i
 # written in body axes: optical x (right) = -y, optical y (down) = -z,
