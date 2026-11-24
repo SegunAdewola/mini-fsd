@@ -61,8 +61,11 @@ def test_scores_a_perfect_floor_candidate() -> None:
     r = harness.evaluate(c, SAMPLES, dataset="fake", threads=2)
     assert r.n_images == len(SAMPLES)
     assert r.metrics["iou"] == pytest.approx(1.0)
-    # The sleep dominates; allow scheduler jitter on a busy laptop.
-    assert SLEEP * 1000 <= r.p50_ms < SLEEP * 1000 + 15
+    # A sleep never returns early, so SLEEP is a hard floor. The ceiling
+    # only has to tell one image from the whole run (which would be
+    # len(SAMPLES) x SLEEP); a tighter one failed on busy shared CI Macs,
+    # where a 20 ms sleep took 51 ms.
+    assert SLEEP * 1000 <= r.p50_ms < SLEEP * 1000 * len(SAMPLES)
     assert r.p95_ms >= r.p50_ms
     assert r.peak_rss_mb > 0
     assert (r.candidate, r.task, r.dataset, r.threads) == (
