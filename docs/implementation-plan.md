@@ -141,7 +141,7 @@ end. Big integration problems show up now, not in December.
   with reprojection error below 0.5 px; on MuJoCo-rendered checkerboards it
   recovers the known fx and fy within 1%; pixel to floor to pixel round-trips
   (property); pixels above the horizon return no point.
-- [ ] V5 `[CV]` feat(perception): zero-shot Depth Anything V2 Small on NYUv2
+- [x] V5 `[CV]` feat(perception): zero-shot Depth Anything V2 Small on NYUv2
   test, with metric scale from a least-squares fit (report both) and M1 latency.
   Needs the pixi `cv` environment (torch, transformers); discuss before adding.
   Test: output shape and dtype on one image; AbsRel below a loose bound on 20
@@ -338,3 +338,12 @@ Add a row at the end of each session.
   the text is ignored. `mission_node` takes `/mission` (String), sends
   `NavigateToPose` and reports on `/mission/status`. End-to-end run: "Go to room
   104" succeeded; "go to room 999" was rejected with the list of rooms.
+- **2026-11-24** V5 result, NYUv2 test (654 images, run once, Eigen crop): Depth
+  Anything V2 Small zero-shot, AbsRel 0.062 and delta1 0.955 with a per-image
+  scale and shift fitted on that image's ground truth (the papers' protocol, an
+  oracle); AbsRel 0.242 and delta1 0.564 with one scale and shift fitted on 100
+  train images (what a robot could use). Latency 524 / 862 ms p50 / p95 on MPS
+  at 518 x 686 under heavy swap; edge latency comes from ONNX Runtime in E6.
+  Preprocessing is our own (OpenCV), shared with the ONNX path. Weights are
+  fetched by hand into `data/models/` (the Hugging Face Xet download stalled)
+  and checked by SHA-256.
