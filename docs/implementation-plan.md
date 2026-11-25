@@ -237,7 +237,7 @@ real-photo steps are written once D6 is done.
 - [x] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
   exposure and gamma, JPEG artefacts) in a pure OpenCV module. Test: shape and
   dtype kept, labels untouched, same rng gives the same output (properties).
-- [ ] D6 `[CV]` data: generate v8, about 10k frames split by seed; record time
+- [x] D6 `[CV]` data: generate v8, about 10k frames split by seed; record time
   and disk size; harness sanity run. Test: the split check from V7. Also count
   frames with almost no floor in view (a camera facing a wall from 0.35 m) and
   bias poses toward open views if they are common.
@@ -497,3 +497,15 @@ Add a row at the end of each session.
   shifts the others. Effects are per frame, from `rng([seed, 6])`; meta.jsonl
   records them. Labels never pass through the module. The default `Effects()`
   returns the image unchanged.
+- **2026-11-25** D6 generated v8: train 450 plans (9,000 frames), val and test
+  25 plans each (500 frames), no plan seed in two splits. 10.5 minutes on the M1
+  (562 s for train), 1.34 GB. Before the run, trial batches showed 7 to 10% of
+  frames with under 2% floor: a camera facing a wall, mostly a tall one held
+  level, whose view meets the floor only 2 to 3 m out. A fixed 1 m of free space
+  ahead fixed only some of them, so `sample_poses` now takes the cameras and
+  needs free space out to where each camera first sees floor, plus 1 m. After
+  that: 0 frames under 2% floor in all 10k, 6 under 5%, median floor share 0.35
+  (was 0.25). Harness sanity run, classical floor baseline on val: IoU 0.465 on
+  v8 against 0.231 on v7-clutter. v8 is not harder for it: floors now differ in
+  colour from walls and fill more of the frame, so its region growing floods
+  walls less. The two numbers are not comparable; v8 is a new benchmark.
