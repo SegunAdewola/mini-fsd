@@ -263,3 +263,13 @@ def test_meta_records_the_plans_look(tmp_path: pathlib.Path) -> None:
         meta = json.loads(line)["appearance"]
         assert meta["floor_kind"] == "carpet"
         assert meta["floor_rgb2"] == pytest.approx([0.3, 0.3, 0.3])
+
+
+def test_about_half_the_sampled_plans_have_glass() -> None:
+    looks = datagen.sample_appearances(2000, np.random.default_rng(0))
+    shares = np.array([a.glass_share for a in looks])
+    assert ((shares >= 0.0) & (shares <= 1.0)).all()
+    with_glass = (shares > 0).mean()
+    assert abs(with_glass - datagen.GLASS_PLAN_SHARE) < 0.04
+    low, high = datagen.GLASS_SHARE_RANGE
+    assert ((shares[shares > 0] >= low) & (shares[shares > 0] <= high)).all()

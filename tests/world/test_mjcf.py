@@ -271,3 +271,67 @@ def test_walls_and_ceiling_take_the_look_colours() -> None:
 def test_rejects_a_look_mujoco_cannot_draw(bad: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         mjcf.Appearance(**bad)  # type: ignore[arg-type]
+
+
+def _alpha(model: mujoco.MjModel, i: int) -> float:
+    return float(model.geom(f"wall_{i}").rgba[3])
+
+
+def _with_glass(
+    share: float, plan: floor_plan.FloorPlan = PLAN
+) -> mujoco.MjModel:
+    look = mjcf.Appearance(glass_share=share)
+    return mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(plan, appearance=look)
+    )
+
+
+def test_hallway_fronts_are_the_walls_facing_the_hallway() -> None:
+    half = PLAN.hallway_width / 2
+    fronts = mjcf.hallway_fronts(PLAN)
+    assert fronts  # the plan has some
+    for i, w in enumerate(PLAN.walls):
+        faces_hallway = w.y_min == pytest.approx(half) or w.y_max == (
+            pytest.approx(-half)
+        )
+        assert (i in fronts) == faces_hallway
+
+
+def test_no_glass_by_default() -> None:
+    model = _compile(PLAN)
+    assert all(_alpha(model, i) == 1.0 for i in range(len(PLAN.walls)))
+
+
+def test_full_glass_turns_only_the_hallway_fronts_to_glass() -> None:
+    model = _with_glass(1.0)
+    fronts = mjcf.hallway_fronts(PLAN)
+    for i in range(len(PLAN.walls)):
+        expected = mjcf.GLASS_RGBA[3] if i in fronts else 1.0
+        assert _alpha(model, i) == pytest.approx(expected)
+        # Glass still stops the robot.
+        assert model.geom(f"wall_{i}").contype[0] == 1
+
+
+@settings(max_examples=25, deadline=None)
+@given(
+    st.integers(min_value=0, max_value=2**32 - 1),
+    st.integers(min_value=1, max_value=6),
+    st.floats(min_value=0.0, max_value=1.0),
+)
+def test_glass_share_sets_how_many_fronts_are_glass(
+    seed: int, n: int, share: float
+) -> None:
+    plan = floor_plan.generate_floor_plan(seed, rooms_per_side=n)
+    model = _with_glass(share, plan)
+    fronts = mjcf.hallway_fronts(plan)
+    glass = [i for i in fronts if _alpha(model, i) < 1.0]
+    assert len(glass) == round(share * len(fronts))
+    # The same plan and share pick the same segments.
+    again = _with_glass(share, plan)
+    assert glass == [i for i in fronts if _alpha(again, i) < 1.0]
+
+
+@pytest.mark.parametrize("share", [-0.1, 1.5])
+def test_rejects_a_glass_share_outside_zero_to_one(share: float) -> None:
+    with pytest.raises(ValueError):
+        mjcf.Appearance(glass_share=share)

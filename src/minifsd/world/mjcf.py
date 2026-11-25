@@ -18,6 +18,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from minifsd.geometry import frames
 from minifsd.world import floor_plan
 
@@ -68,6 +70,8 @@ FLOOR_MATERIAL = "floor_mat"
 FLOOR_KINDS = ("checker", "tiles", "carpet", "plain")
 CARPET_FLECKS = 0.3  # share of carpet texels in the second colour
 TEXTURE_SIZE = 256  # texels per side of one period
+# D3b glass room fronts: a faint blue-green tint, mostly see-through.
+GLASS_RGBA = (0.6, 0.75, 0.75, 0.25)
 
 RGB = tuple[float, float, float]
 
@@ -87,6 +91,9 @@ class Appearance:
         floor_period_m: Metres per repeat of the floor pattern.
         wall_rgb: Wall colour.
         ceiling_rgb: Ceiling colour.
+        glass_share: Share of the hallway fronts (hallway_fronts) that are
+            glass, in [0, 1]. Glass still blocks the robot; only its
+            colour changes.
     """
 
     floor_kind: str = "checker"
@@ -95,6 +102,7 @@ class Appearance:
     floor_period_m: float = 1.7  # about the old fixed tiling on a small plan
     wall_rgb: RGB = (0.85, 0.85, 0.8)
     ceiling_rgb: RGB = (0.92, 0.92, 0.9)
+    glass_share: float = 0.0
 
     def __post_init__(self) -> None:
         """Rejects looks MuJoCo can't draw.
@@ -112,6 +120,10 @@ class Appearance:
             rgb = getattr(self, name)
             if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
                 raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
+        if not 0.0 <= self.glass_share <= 1.0:
+            raise ValueError(
+                f"glass_share must be in [0, 1], got {self.glass_share}"
+            )
         if self.floor_period_m <= 0:
             raise ValueError(
                 f"floor_period_m must be positive, got {self.floor_period_m}"
@@ -197,7 +209,9 @@ def build_mjcf(
         conaffinity="0",
     )
 
+    glass = _glass_walls(plan, appearance.glass_share)
     for i, wall in enumerate(plan.walls):
+        rgba = GLASS_RGBA if i in glass else (*appearance.wall_rgb, 1)
         # MuJoCo box sizes are half-lengths, centred on pos.
         ET.SubElement(
             world,
@@ -214,7 +228,7 @@ def build_mjcf(
                 (wall.y_min + wall.y_max) / 2,
                 WALL_HEIGHT / 2,
             ),
-            rgba=_fmt(*appearance.wall_rgb, 1),
+            rgba=_fmt(*rgba),
         )
 
     # Without a ceiling the camera sees empty sky above the walls once it
@@ -299,6 +313,34 @@ def build_mjcf(
     ET.SubElement(keyframes, "key", name=SPAWN_KEY, qpos=_fmt(s.x, s.y, s.yaw))
 
     return ET.tostring(root, encoding="unicode")
+
+
+def hallway_fronts(plan: floor_plan.FloorPlan) -> list[int]:
+    """Indices into plan.walls of the wall segments facing the hallway.
+
+    These are the room fronts between doors, the walls that are glass in
+    many campus buildings. End walls (which span both sides) and the rooms'
+    back and side walls are not included.
+    """
+    half = plan.hallway_width / 2
+    eps = 1e-9
+    return [
+        i
+        for i, w in enumerate(plan.walls)
+        if abs(w.y_min - half) < eps or abs(w.y_max + half) < eps
+    ]
+
+
+def _glass_walls(plan: floor_plan.FloorPlan, share: float) -> set[int]:
+    """The hallway fronts that are glass: round(share * fronts) of them.
+
+    Which ones is seeded by the plan, so the same plan and share always
+    give the same glass.
+    """
+    fronts = hallway_fronts(plan)
+    count = round(share * len(fronts))
+    rng = np.random.default_rng([plan.seed, 5])
+    return {int(i) for i in rng.permutation(fronts)[:count]}
 
 
 def _add_floor_texture(asset: ET.Element, look: Appearance) -> None:

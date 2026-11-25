@@ -356,3 +356,27 @@ def test_the_same_look_renders_the_same_pixels() -> None:
     finally:
         a.close()
         b.close()
+
+
+@pytest.mark.gl
+def test_glass_is_labelled_as_the_wall_it_is(s: sim.Sim) -> None:
+    # D3b: through glass the camera sees the room behind, but the robot
+    # can't drive there. So the labels must be those of a solid wall: the
+    # floor mask stops at the glass and depth reads the glass. Only the
+    # picture changes.
+    glass = sim.Sim(PLAN, appearance=mjcf.Appearance(glass_share=1.0))
+    try:
+        # Facing a hallway front, side-on, from the middle of the hallway.
+        pose = floor_plan.Pose2D(PLAN.length / 2 + 0.4, 0.0, math.pi / 2)
+        for each in (s, glass):
+            each.set_pose(pose)
+            each.set_camera(sim.CameraSetup(0.5, math.radians(10.0), 0.0))
+        np.testing.assert_array_equal(
+            glass.render_floor_mask(), s.render_floor_mask()
+        )
+        np.testing.assert_allclose(
+            glass.render_depth(), s.render_depth(), atol=1e-4
+        )
+        assert not np.array_equal(glass.render_rgb(), s.render_rgb())
+    finally:
+        glass.close()

@@ -13,7 +13,8 @@ remembering a floor it trained on.
 Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
 distractors, and each frame its own camera: from robot height to a handheld
 phone tilted down (D1), with its own field of view (D2). Each plan also
-gets its own floor pattern and colours (D3). Lighting is still fixed; the
+gets its own floor pattern and colours (D3), and about half get glass room
+fronts (D3b). Lighting is still fixed; the
 rest of domain randomization follows in M2 (D4 and D5).
 
 Output, per split folder:
@@ -63,6 +64,10 @@ FLOOR_PERIOD_RANGE_M = (0.3, 2.0)  # small tiles to big checker squares
 FLOOR_VALUE_RANGE = (0.15, 0.85)
 WALL_VALUE_RANGE = (0.45, 0.95)
 CEILING_VALUE_RANGE = (0.75, 1.0)
+# D3b: about half the plans have glass room fronts (the campus building has
+# many), and those get glass on a share of their fronts.
+GLASS_PLAN_SHARE = 0.5
+GLASS_SHARE_RANGE = (0.3, 1.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -193,6 +198,9 @@ def sample_appearances(
         floor_rgb2 = _shade(rng, floor_rgb)
         wall_rgb = _colour(rng, wild, WALL_VALUE_RANGE)
         ceiling_rgb = _colour(rng, wild, CEILING_VALUE_RANGE)
+        glass = 0.0
+        if rng.random() < GLASS_PLAN_SHARE:
+            glass = float(rng.uniform(*GLASS_SHARE_RANGE))
         looks.append(
             mjcf.Appearance(
                 floor_kind=kind,
@@ -201,6 +209,7 @@ def sample_appearances(
                 floor_period_m=period,
                 wall_rgb=wall_rgb,
                 ceiling_rgb=ceiling_rgb,
+                glass_share=glass,
             )
         )
     return looks
