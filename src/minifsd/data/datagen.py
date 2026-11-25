@@ -14,8 +14,8 @@ Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
 distractors, and each frame its own camera: from robot height to a handheld
 phone tilted down (D1), with its own field of view (D2). Each plan also
 gets its own floor pattern and colours (D3), and about half get glass room
-fronts (D3b). Lighting varies per plan too (D4). The camera effects
-follow in D5.
+fronts (D3b). Lighting varies per plan too (D4). Last, each frame goes
+through camera effects (D5): blur, noise, exposure, gamma and JPEG.
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -35,6 +35,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 from scipy import ndimage
 
+from minifsd.data import camera_effects
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf, occupancy, sim
@@ -92,6 +93,26 @@ class Frame:
     floor: np.ndarray  # (H, W) bool
     camera: sim.CameraSetup = sim.CameraSetup()
     appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE
+    effects: camera_effects.Effects = camera_effects.Effects()
+
+
+def with_effects(
+    frame: Frame, effects: camera_effects.Effects, rng: np.random.Generator
+) -> Frame:
+    """The frame as a real camera would have taken it (D5).
+
+    Args:
+        frame: A clean render.
+        effects: The camera effects for this frame.
+        rng: The random source for sensor noise.
+
+    Returns:
+        A new frame with the effects applied to its RGB and recorded. The
+        floor mask and depth are the same arrays: they describe the scene,
+        which the camera's flaws don't change.
+    """
+    rgb = camera_effects.apply(frame.rgb, effects, rng)
+    return dataclasses.replace(frame, rgb=rgb, effects=effects)
 
 
 def seeds_for(split: str, n: int) -> list[int]:
@@ -357,6 +378,7 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         "camera_roll": frame.camera.roll,
         "intrinsics": dataclasses.asdict(k),
         "appearance": dataclasses.asdict(frame.appearance),
+        "effects": dataclasses.asdict(frame.effects),
     }
     with (out_dir / "meta.jsonl").open("a") as f:
         f.write(json.dumps(meta) + "\n")
@@ -440,8 +462,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.frames_per_plan, np.random.default_rng([seed, 3])
         )
         (look,) = sample_appearances(1, np.random.default_rng([seed, 4]))
+        fx_rng = np.random.default_rng([seed, 6])
         for frame in render_frames(plan, poses, boxes, cameras, look):
-            write_frame(frame, out)
+            effects = camera_effects.sample_effects(fx_rng)
+            write_frame(with_effects(frame, effects, fx_rng), out)
             total += 1
     print(f"{total} frames from {args.plans} plans in {out}/")
 

@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from minifsd.data import datagen
+from minifsd.data import camera_effects, datagen
 from minifsd.geometry import frames
 from minifsd.world import floor_plan, mjcf, sim
 
@@ -311,3 +311,37 @@ def test_sampled_lighting_is_never_black_or_blown_out() -> None:
         assert 30 <= grey.mean() <= 225, a
         assert (grey < 10).mean() < 0.2, a  # crushed to black
         assert (rgb.min(axis=2) >= 250).mean() < 0.05, a  # clipped to white
+
+
+def _plain_frame() -> datagen.Frame:
+    rng = np.random.default_rng(0)
+    return datagen.Frame(
+        plan_seed=7,
+        index=0,
+        pose=floor_plan.Pose2D(1.0, 0.0, 0.0),
+        rgb=rng.integers(0, 256, (24, 32, 3), np.uint8),
+        depth=rng.uniform(0.5, 5.0, (24, 32)).astype(np.float32),
+        floor=rng.random((24, 32)) > 0.5,
+    )
+
+
+def test_camera_effects_change_the_picture_and_not_the_labels() -> None:
+    frame = _plain_frame()
+    effects = camera_effects.Effects(blur_sigma=1.0, noise_sigma=5.0)
+    out = datagen.with_effects(frame, effects, np.random.default_rng(0))
+    assert out.effects == effects
+    assert not np.array_equal(out.rgb, frame.rgb)
+    np.testing.assert_array_equal(out.depth, frame.depth)
+    np.testing.assert_array_equal(out.floor, frame.floor)
+    assert (out.plan_seed, out.index, out.pose) == (7, 0, frame.pose)
+
+
+def test_meta_records_the_frames_camera_effects(tmp_path: pathlib.Path) -> None:
+    effects = camera_effects.Effects(motion_px=3.0, jpeg_quality=60)
+    frame = datagen.with_effects(
+        _plain_frame(), effects, np.random.default_rng(0)
+    )
+    datagen.write_frame(frame, tmp_path)
+    meta = json.loads((tmp_path / "meta.jsonl").read_text())["effects"]
+    assert meta["motion_px"] == pytest.approx(3.0)
+    assert meta["jpeg_quality"] == 60
