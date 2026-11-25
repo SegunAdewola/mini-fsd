@@ -18,23 +18,24 @@ protocol changes, change it here first.
 
 ## Quick card
 
-- 50 photos per floor: 25 at **20 in**, 25 at **59 in** (lens height).
+- 60 photos per floor: 30 at **20 in**, 30 at **59 in** (lens height).
 - Card photo before each block: "F15 · 20 in".
 - Main 1x lens, landscape, 4:3, no zoom, no Portrait, no Night Sight.
 - Floor visible in almost every photo. Horizon level.
 - Move about 6 ft or turn to a new view between shots.
+- About 8 photos per floor with people in them, faces turned away or far off.
 - No identifiable faces.
 
 ## How many
 
-About 40 usable photos per floor, half at each height. Take about 50, since some
+About 50 usable photos per floor, half at each height. Take about 60, since some
 come out blurred or nearly the same as another.
 
 | Floor | Use                                                           | Target |
 | ----- | ------------------------------------------------------------- | ------ |
-| 15    | Validation: pick models here; pool for the 50-photo fine-tune | 40     |
-| 14    | Test: same layout as 15, unseen floor                         | 40     |
-| 2     | Test: a layout the models have never seen                     | 40     |
+| 15    | Validation: pick models here; pool for the 50-photo fine-tune | 50     |
+| 14    | Test: same layout as 15, unseen floor                         | 50     |
+| 2     | Test: a layout the models have never seen                     | 50     |
 
 One building only (decided 2026-11-22). Floors 14 and 15 share a layout, so
 floor 2 is the test of an unseen layout; NYUv2 test covers unseen buildings.
@@ -103,15 +104,27 @@ Per floor, roughly:
 | Glass walls and doors, on purpose                            | 5     | Known failure case for depth                    |
 | Things on the floor: chairs, bins, bags, boxes               | 5     | Obstacle dodging                                |
 | Hard cases: shiny floor, carpet, bright windows, dim corners | 4     | Honest coverage                                 |
+| People walking or standing, from behind, side-on or far off  | 8     | Person detection (moving obstacles)             |
 
 Move about 6 ft (2 m) between shots, or turn to face a new direction. Spread the
 photos over the whole floor, not just near the elevators.
 
 ## People
 
-Shoot when an area is empty, or frame people out. Delete any photo with an
-identifiable face. The photos are never committed to GitHub, but some may appear
-in the report.
+People are part of the test now: the robot has to detect them as obstacles. Take
+about 8 photos per floor with people in them, on top of the shot list above.
+Keep them unidentifiable:
+
+- Photograph people from behind, side-on, or far enough away (about 15 ft or
+  more) that a face is a few pixels.
+- If someone is close and facing you, wait for them to pass or skip the shot.
+- Ask before photographing anyone up close, even from behind. Don't photograph
+  anyone who objects, and delete the photo if they ask.
+- Before copying the photos over, blur any face that is still recognisable, or
+  delete the photo. Check at full size, not on the phone's thumbnail.
+
+The photos are never committed to GitHub, but some may appear in the report. For
+the rest of the shot list, frame people out as before.
 
 ## Optional: walking videos
 
