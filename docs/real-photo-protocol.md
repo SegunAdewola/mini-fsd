@@ -30,12 +30,14 @@ protocol changes, change it here first.
 About 40 usable photos per floor, half at each height. Take about 50, since some
 come out blurred or nearly the same as another.
 
-| Floor                  | Use                                                           | Target   |
-| ---------------------- | ------------------------------------------------------------- | -------- |
-| 2                      | Validation: pick models here; pool for the 50-photo fine-tune | 40       |
-| 14                     | Test: used once, for the final numbers                        | 40       |
-| 15                     | Test: used once, for the final numbers                        | 40       |
-| 2 to 3 other buildings | Test, later if time allows                                    | about 40 |
+| Floor | Use                                                           | Target |
+| ----- | ------------------------------------------------------------- | ------ |
+| 15    | Validation: pick models here; pool for the 50-photo fine-tune | 40     |
+| 14    | Test: same layout as 15, unseen floor                         | 40     |
+| 2     | Test: a layout the models have never seen                     | 40     |
+
+One building only (decided 2026-11-22). Floors 14 and 15 share a layout, so
+floor 2 is the test of an unseen layout; NYUv2 test covers unseen buildings.
 
 Once the test photos are copied over, nobody looks at model results on them
 until the final run.
