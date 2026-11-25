@@ -232,7 +232,7 @@ real-photo steps are written once D6 is done.
   behind it, depth to the glass, since the robot can't drive through. Test: with
   glass, the floor mask and depth match the solid wall while the RGB changes;
   only hallway fronts turn to glass.
-- [ ] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
+- [x] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
   Test: image brightness stays in range, never black or blown out.
 - [ ] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
   exposure and gamma, JPEG artefacts) in a pure OpenCV module. Test: shape and
@@ -479,3 +479,13 @@ Add a row at the end of each session.
   not as what lies behind it, since the robot can't drive through. MuJoCo gives
   this for free: a transparent geom still writes the depth buffer and the
   segmentation, so the labels match a solid wall and only the RGB changes.
+- **2026-11-25** D4 lighting per plan, as fields on `Appearance` rather than a
+  separate class, since lighting is part of how a plan looks and that avoids
+  threading a second object through `Sim` and the data engine. Ambient 0.05 to
+  0.35 (on one light only; MuJoCo adds up every light's ambient), top light 0.3
+  to 0.8, angled light 0.1 to 0.5 from any compass direction at 20 to 70 degrees
+  down. The ambient floor above zero fixes the near-black side walls and
+  ceilings seen since D3. The default keeps the old lights. Test: 30 sampled
+  plans, none with mean grey outside 30 to 225, more than 20% of pixels below
+  10, or more than 5% clipped white. That test passed on the old fixed lights
+  too, so it guards the new sampling rather than proving it.
