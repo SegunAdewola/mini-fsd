@@ -94,6 +94,13 @@ class Appearance:
         glass_share: Share of the hallway fronts (hallway_fronts) that are
             glass, in [0, 1]. Glass still blocks the robot; only its
             colour changes.
+        ambient: Ambient light in [0, 1], which lights every surface the
+            same whichever way it faces (D4).
+        main_light: Brightness of the light shining straight down.
+        side_light: Brightness of the angled light, which shades walls by
+            the way they face.
+        side_light_dir: Direction the angled light shines; must point
+            down (z < 0). Need not be unit length.
     """
 
     floor_kind: str = "checker"
@@ -103,6 +110,10 @@ class Appearance:
     wall_rgb: RGB = (0.85, 0.85, 0.8)
     ceiling_rgb: RGB = (0.92, 0.92, 0.9)
     glass_share: float = 0.0
+    ambient: float = 0.0
+    main_light: float = 0.6
+    side_light: float = 0.35
+    side_light_dir: tuple[float, float, float] = (1.0, 0.4, -0.6)
 
     def __post_init__(self) -> None:
         """Rejects looks MuJoCo can't draw.
@@ -120,6 +131,14 @@ class Appearance:
             rgb = getattr(self, name)
             if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
                 raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
+        for name in ("ambient", "main_light", "side_light"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1], got {value}")
+        if len(self.side_light_dir) != 3 or self.side_light_dir[2] >= 0:
+            raise ValueError(
+                f"side_light_dir must point down, got {self.side_light_dir}"
+            )
         if not 0.0 <= self.glass_share <= 1.0:
             raise ValueError(
                 f"glass_share must be in [0, 1], got {self.glass_share}"
@@ -177,6 +196,9 @@ def build_mjcf(
     # building's ceiling lights. Spot lights (MuJoCo's default) light only a
     # cone, and shadowing lights above the ceiling would leave the floor
     # dark. The second, angled light shades walls by the way they face.
+    # Ambient goes on the first light only: MuJoCo adds up every light's
+    # ambient, so on both it would count twice.
+    look = appearance
     ET.SubElement(
         world,
         "light",
@@ -184,7 +206,8 @@ def build_mjcf(
         castshadow="false",
         pos=_fmt(plan.length / 2, 0, WALL_HEIGHT),
         dir="0 0 -1",
-        diffuse=".6 .6 .6",
+        diffuse=_fmt(*[look.main_light] * 3),
+        ambient=_fmt(*[look.ambient] * 3),
     )
     ET.SubElement(
         world,
@@ -192,8 +215,8 @@ def build_mjcf(
         directional="true",
         castshadow="false",
         pos=_fmt(0, 0, WALL_HEIGHT),
-        dir=_fmt(1, 0.4, -0.6),
-        diffuse=".35 .35 .35",
+        dir=_fmt(*look.side_light_dir),
+        diffuse=_fmt(*[look.side_light] * 3),
     )
     # The floor is only for looks: the robot has no vertical joint, so it
     # can't fall, and turning off its contacts avoids floor friction.

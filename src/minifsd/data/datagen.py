@@ -14,8 +14,8 @@ Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
 distractors, and each frame its own camera: from robot height to a handheld
 phone tilted down (D1), with its own field of view (D2). Each plan also
 gets its own floor pattern and colours (D3), and about half get glass room
-fronts (D3b). Lighting is still fixed; the
-rest of domain randomization follows in M2 (D4 and D5).
+fronts (D3b). Lighting varies per plan too (D4). The camera effects
+follow in D5.
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -68,6 +68,13 @@ CEILING_VALUE_RANGE = (0.75, 1.0)
 # many), and those get glass on a share of their fronts.
 GLASS_PLAN_SHARE = 0.5
 GLASS_SHARE_RANGE = (0.3, 1.0)
+# D4 lighting per plan: from a dim corridor to a bright atrium. Ambient has a
+# floor above zero so walls seen side-on never go black. The angled light
+# comes from any compass direction, 20 to 70 degrees below the horizon.
+AMBIENT_RANGE = (0.05, 0.35)
+MAIN_LIGHT_RANGE = (0.3, 0.8)
+SIDE_LIGHT_RANGE = (0.1, 0.5)
+SIDE_LIGHT_ELEVATION_DEG = (20.0, 70.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -201,6 +208,14 @@ def sample_appearances(
         glass = 0.0
         if rng.random() < GLASS_PLAN_SHARE:
             glass = float(rng.uniform(*GLASS_SHARE_RANGE))
+        # Lighting is drawn last, so the D3 looks above are unchanged.
+        azimuth = rng.uniform(0.0, 2 * math.pi)
+        down = math.radians(rng.uniform(*SIDE_LIGHT_ELEVATION_DEG))
+        side_dir = (
+            float(math.cos(down) * math.cos(azimuth)),
+            float(math.cos(down) * math.sin(azimuth)),
+            float(-math.sin(down)),
+        )
         looks.append(
             mjcf.Appearance(
                 floor_kind=kind,
@@ -210,6 +225,10 @@ def sample_appearances(
                 wall_rgb=wall_rgb,
                 ceiling_rgb=ceiling_rgb,
                 glass_share=glass,
+                ambient=float(rng.uniform(*AMBIENT_RANGE)),
+                main_light=float(rng.uniform(*MAIN_LIGHT_RANGE)),
+                side_light=float(rng.uniform(*SIDE_LIGHT_RANGE)),
+                side_light_dir=side_dir,
             )
         )
     return looks

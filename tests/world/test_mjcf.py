@@ -335,3 +335,46 @@ def test_glass_share_sets_how_many_fronts_are_glass(
 def test_rejects_a_glass_share_outside_zero_to_one(share: float) -> None:
     with pytest.raises(ValueError):
         mjcf.Appearance(glass_share=share)
+
+
+def test_the_default_lighting_is_the_old_fixed_one() -> None:
+    # D4 varies lighting for the data engine only; the ROS sim keeps its
+    # lights: one straight down at 0.6, one angled at 0.35, no ambient.
+    model = _compile(PLAN)
+    np.testing.assert_allclose(model.light_diffuse, [[0.6] * 3, [0.35] * 3])
+    np.testing.assert_allclose(model.light_ambient, 0.0)
+    np.testing.assert_allclose(model.light_dir[0], [0, 0, -1])
+    angled = np.array([1.0, 0.4, -0.6])
+    np.testing.assert_allclose(
+        model.light_dir[1], angled / np.linalg.norm(angled), rtol=1e-6
+    )
+
+
+def test_lighting_fields_reach_the_model() -> None:
+    look = mjcf.Appearance(
+        ambient=0.3, main_light=0.5, side_light=0.2, side_light_dir=(0, -1, -1)
+    )
+    model = mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(PLAN, appearance=look)
+    )
+    np.testing.assert_allclose(model.light_diffuse, [[0.5] * 3, [0.2] * 3])
+    # Ambient light is a property of the scene, not of a direction, so it
+    # goes on one light only; on both it would count twice.
+    np.testing.assert_allclose(model.light_ambient, [[0.3] * 3, [0.0] * 3])
+    np.testing.assert_allclose(
+        model.light_dir[1], [0, -(0.5**0.5), -(0.5**0.5)], rtol=1e-6
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"ambient": 1.2},
+        {"main_light": -0.1},
+        {"side_light": 2.0},
+        {"side_light_dir": (1.0, 0.0, 0.5)},  # pointing up, lights nothing
+    ],
+)
+def test_rejects_lighting_mujoco_cannot_use(bad: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        mjcf.Appearance(**bad)  # type: ignore[arg-type]

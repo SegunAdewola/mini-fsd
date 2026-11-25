@@ -273,3 +273,41 @@ def test_about_half_the_sampled_plans_have_glass() -> None:
     assert abs(with_glass - datagen.GLASS_PLAN_SHARE) < 0.04
     low, high = datagen.GLASS_SHARE_RANGE
     assert ((shares[shares > 0] >= low) & (shares[shares > 0] <= high)).all()
+
+
+@given(st.integers(min_value=0, max_value=2**32 - 1))
+def test_sampled_lighting_stays_in_range(seed: int) -> None:
+    for a in datagen.sample_appearances(50, np.random.default_rng(seed)):
+        assert datagen.AMBIENT_RANGE[0] <= a.ambient <= datagen.AMBIENT_RANGE[1]
+        lo, hi = datagen.MAIN_LIGHT_RANGE
+        assert lo <= a.main_light <= hi
+        lo, hi = datagen.SIDE_LIGHT_RANGE
+        assert lo <= a.side_light <= hi
+        x, y, z = a.side_light_dir
+        assert np.linalg.norm([x, y, z]) == pytest.approx(1.0)
+        # Elevation below the horizon, within the sampled range.
+        down = np.degrees(np.arcsin(-z))
+        lo, hi = datagen.SIDE_LIGHT_ELEVATION_DEG
+        assert lo - 1e-6 <= down <= hi + 1e-6
+
+
+@pytest.mark.gl
+def test_sampled_lighting_is_never_black_or_blown_out() -> None:
+    # D4's real test: whatever the draw, a model gets a usable picture. The
+    # darkest floor (value 0.15) under the dimmest lights must still show,
+    # and the palest walls under the brightest must not clip to white.
+    looks = datagen.sample_appearances(30, np.random.default_rng(0))
+    pose = floor_plan.Pose2D(PLAN.spawn.x, PLAN.spawn.y, 0.3)
+    cam = sim.CameraSetup(1.0, np.radians(10.0), 0.0)
+    for a in looks:
+        s = sim.Sim(PLAN, appearance=a)
+        try:
+            s.set_pose(pose)
+            s.set_camera(cam)
+            rgb = s.render_rgb()
+        finally:
+            s.close()
+        grey = rgb.mean(axis=2)
+        assert 30 <= grey.mean() <= 225, a
+        assert (grey < 10).mean() < 0.2, a  # crushed to black
+        assert (rgb.min(axis=2) >= 250).mean() < 0.05, a  # clipped to white
