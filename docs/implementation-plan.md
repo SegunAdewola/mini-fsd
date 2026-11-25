@@ -271,16 +271,21 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   hidden object has none; boxes lie inside the image (property); the COCO file
   loads with the categories in order.
 
-- [ ] D9 `[CV]` data: generate v9 with signs and boxes, same split sizes and
+- [x] D9 `[CV]` data: generate v9 with signs and boxes, same split sizes and
   seeds as v8. Test: the split check; box counts per class per split recorded
   here; harness sanity run.
 
 - [ ] D10 `[CV]` data: COCO person subset for the detector's person class
-  (decided 2026-11-25, option 3): COCO 2017 images that hold people, with only
-  their person boxes, about 5k train and 500 val. Sim frames supply the other
-  three classes. Training (M3) must treat a class that an image's source doesn't
-  label as unlabeled, not as background. Test: every kept annotation is a
-  person; image ids are unique; the subset is reproducible from a seed.
+  (decided 2026-11-25, option 3): COCO 2017 images that hold a person of at
+  least 32 x 32 px, about 5k train and 500 val, from the full instances files.
+  People keep their boxes, and COCO's furniture and floor clutter (chair, couch,
+  bench, bags, suitcase, plant, bed, table, fridge, bicycle) become obstacle
+  (option a), so a real chair is never learned as background. Doors and signs
+  have no COCO category; training must treat them as unlabeled on COCO images
+  (T3). Test: kept annotations are people or mapped obstacles in our category
+  ids; unmapped categories are dropped; image ids are unique; the subset is
+  reproducible from a seed; the obstacle names are checked against the real
+  file.
 
 Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
 
@@ -387,15 +392,6 @@ Not decided yet. Each has the step where it must be settled.
 - **Real photos depend on campus access** (M2). If campus slips past about Dec
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
-
-- **COCO images don't label our other classes** (T3). A COCO photo with a person
-  and a chair labels only the person, so training would learn that a real chair
-  is background, the opposite of "obstacle". Options: map COCO's furniture and
-  clutter categories (chair, couch, bench, suitcase, backpack, potted plant,
-  dining table and similar) to obstacle, which needs COCO's full instances file
-  instead of the person-only one D10 uses; drop COCO images that hold any such
-  object; or mask the loss per source, which neither trainer supports without
-  changes. Doors and signs have no COCO category either way.
 
 - **Explorer access** (T2). Confirm the account works, SSH keys are set up, and
   the scratch quota fits v9 (1.4 GB) plus COCO people (about 1 GB).
@@ -671,3 +667,11 @@ Add a row at the end of each session.
   plans take 59 s against 32 s before, so v9 should take about 25 minutes. A
   400-frame trial: 557 door, 245 obstacle and 197 sign boxes; 28% of frames have
   none.
+- **2026-11-25** D9 generated v9 (signs, door frames, boxes, COCO files): same
+  splits and seeds as v8, no plan seed in two splits. 24.5 minutes (1318 s for
+  train, 77 and 78 s for val and test), 1.44 GB. Floor still in view everywhere:
+  0 frames under 2% floor, 6 under 5%, median share 0.35. Boxes (door / obstacle
+  / room_sign): train 11234 / 6064 / 4700, val 698 / 299 / 264, test 524 / 368 /
+  233; frames with no box: 25% of train, 26% of val, 27% of test. Harness sanity
+  run, classical floor baseline on val: IoU 0.466 (v8: 0.465), so the door
+  frames and signs did not change the floor task.
