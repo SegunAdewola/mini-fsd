@@ -307,10 +307,61 @@ Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
 
 ## M3 Model comparison E1 to E3
 
-Steps written at the end of M2. E1 detection (YOLO26n vs RF-DETR Nano), E2 floor
-segmentation (classical vs SegFormer-B0 vs frozen DINOv3 plus head), E3 depth
-(Depth Anything V2 Small vs DA3 Small vs distilled head). Trained on Explorer,
-picked on real val.
+Scope: train and compare the candidates for floor segmentation (E2), detection
+(E1) and depth (E3) on Explorer, and score every one through the harness, so
+accuracy and latency come from the same code. Ordered by what the report needs
+most: E2 first (it carries the floor IoU success criterion), then E1, then E3.
+The real photos aren't taken yet, so models are picked on sim val (v9) plus an
+NYUv2 val subset (from NYUv2 train, so NYUv2 test stays clean), and real floor
+15 confirms the pick once P3 is done. If behind, the design's rule holds: 2
+candidates per experiment.
+
+- [ ] T1 `[CV]` feat(eval): detection metrics in the harness: mAP at IoU 0.5 per
+  class and averaged, written in our code (VOC-style all-point interpolation)
+  rather than adding pycocotools. Crowd regions are ignored, as in COCO. Test:
+  perfect boxes give 1.0; boxes shifted past IoU 0.5 give 0; a missed object
+  lowers recall by its share (properties); a crowd match is neither a hit nor a
+  false alarm.
+- [ ] T2 `[CV]` build: training on Explorer. A pixi `train` environment (torch
+  with CUDA, ultralytics, rfdetr, transformers; new dependencies, ask first),
+  the v9 and COCO people data synced to scratch, and one Slurm job template that
+  checkpoints every epoch and resumes, since the `gpu` partition stops jobs at 8
+  h. Test: a 2-epoch smoke run on 50 images finishes, and a run killed after
+  epoch 1 resumes at epoch 2 with the same loss curve.
+- [ ] T3 `[CV]` feat(train): dataset adapters from v9 and COCO people to each
+  trainer's format: YOLO txt labels, RF-DETR's COCO folders, and floor-mask
+  pairs for segmentation. Decide before starting how COCO images avoid teaching
+  that real furniture is background (see open follow-ups). Test: a box survives
+  the round trip to each format and back to pixels; every image keeps its
+  labels; class ids match `boxes.CATEGORIES`.
+- [ ] E2a `[CV]` exp: SegFormer-B0 (ImageNet-pretrained, Hugging Face) for floor
+  segmentation on v9 train. Score floor IoU on v9 val and the NYUv2 val subset,
+  and latency at the camera's size, through the harness. Test: the harness
+  candidate loads a checkpoint and returns a (H, W) bool mask; results logged to
+  runs/harness/results.jsonl.
+- [ ] E2b `[CV]` exp: frozen DINOv3 ViT-S/16 with a light head, same data and
+  scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
+  (open) stands in and the report says so. This tests the design's hypothesis
+  that foundation features cross the sim-to-real gap better.
+- [ ] E1a `[CV]` exp: YOLO26n fine-tuned on v9 train plus COCO people, scored by
+  T1's mAP on v9 val and COCO people val, plus latency. Check the AGPL question
+  (open follow-ups) before the weights go in the repo or the demo.
+- [ ] E1b `[CV]` exp: RF-DETR Nano, same data and scoring.
+- [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot through the harness, on
+  NYUv2 test and v9 val, next to V5's Depth Anything V2 Small numbers, with the
+  same per-image and global scale fits.
+- [ ] E3b `[CV]` exp: a small distilled depth network: a light encoder and
+  decoder trained on v9's exact depth plus Depth Anything V2's outputs on NYUv2
+  train (scale and shift fitted per image), with metric scale from the floor
+  plane at run time. Target: under 50 ms on the M1 with AbsRel close to the
+  teacher's. Test: the harness candidate returns depth in metres; the floor
+  plane scale recovers a known camera height on sim frames within 5%.
+- [ ] T4 `[CV]` feat(eval): results table and accuracy against latency plot
+  (Pareto front) from results.jsonl, one per experiment, for the report. Test: a
+  fixture log gives the expected table rows and front.
+- [ ] T5 `[CV]` docs: pick the winner of each experiment by the design's rule
+  (most accurate inside the latency budget) and record the numbers and reasons
+  here. Real floor 15 confirms or overturns the floor pick once labeled.
 
 ## M4 Model perception in the loop, E4 and E5
 
@@ -336,6 +387,18 @@ Not decided yet. Each has the step where it must be settled.
 - **Real photos depend on campus access** (M2). If campus slips past about Dec
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
+
+- **COCO images don't label our other classes** (T3). A COCO photo with a person
+  and a chair labels only the person, so training would learn that a real chair
+  is background, the opposite of "obstacle". Options: map COCO's furniture and
+  clutter categories (chair, couch, bench, suitcase, backpack, potted plant,
+  dining table and similar) to obstacle, which needs COCO's full instances file
+  instead of the person-only one D10 uses; drop COCO images that hold any such
+  object; or mask the loss per source, which neither trainer supports without
+  changes. Doors and signs have no COCO category either way.
+
+- **Explorer access** (T2). Confirm the account works, SSH keys are set up, and
+  the scratch quota fits v9 (1.4 GB) plus COCO people (about 1 GB).
 
 - **Depth Anything 3 Small gives relative depth only** (V5, M3). Metric scale
   must come from known camera height and the floor plane.
