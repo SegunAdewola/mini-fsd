@@ -25,6 +25,7 @@ its consequences and the alternatives that were rejected.
 - [0004 Use the simulator's true pose instead of localization](decisions/0004-ground-truth-pose.md)
 - [0005 Follow Google style guides, enforced by linters](decisions/0005-google-style-toolchain.md)
 - [0006 License the repo under Apache-2.0](decisions/0006-apache-2-license.md)
+- [0007 Train on Colab's free tier, not Explorer, for now](decisions/0007-train-on-colab.md)
 
 ## Learning
 

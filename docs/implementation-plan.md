@@ -313,13 +313,13 @@ Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
 ## M3 Model comparison E1 to E3
 
 Scope: train and compare the candidates for floor segmentation (E2), detection
-(E1) and depth (E3) on Explorer, and score every one through the harness, so
-accuracy and latency come from the same code. Ordered by what the report needs
-most: E2 first (it carries the floor IoU success criterion), then E1, then E3.
-The real photos aren't taken yet, so models are picked on sim val (v9) plus an
-NYUv2 val subset (from NYUv2 train, so NYUv2 test stays clean), and real floor
-15 confirms the pick once P3 is done. If behind, the design's rule holds: 2
-candidates per experiment.
+(E1) and depth (E3) on Colab's free tier (ADR 0007), and score every one through
+the harness, so accuracy and latency come from the same code. Ordered by what
+the report needs most: E2 first (it carries the floor IoU success criterion),
+then E1, then E3. The real photos aren't taken yet, so models are picked on sim
+val (v9) plus an NYUv2 val subset (from NYUv2 train, so NYUv2 test stays clean),
+and real floor 15 confirms the pick once P3 is done. If behind, the design's
+rule holds: 2 candidates per experiment.
 
 - [x] T1 `[CV]` feat(eval): detection metrics in the harness: mAP at IoU 0.5 per
   class and averaged, written in our code (VOC-style all-point interpolation)
@@ -327,12 +327,14 @@ candidates per experiment.
   perfect boxes give 1.0; boxes shifted past IoU 0.5 give 0; a missed object
   lowers recall by its share (properties); a crowd match is neither a hit nor a
   false alarm.
-- [ ] T2 `[CV]` build: training on Explorer. A pixi `train` environment (torch
-  with CUDA, ultralytics, rfdetr, transformers; new dependencies, ask first),
-  the v9 and COCO people data synced to scratch, and one Slurm job template that
-  checkpoints every epoch and resumes, since the `gpu` partition stops jobs at 8
-  h. Test: a 2-epoch smoke run on 50 images finishes, and a run killed after
-  epoch 1 resumes at epoch 2 with the same loss curve.
+- [ ] T2 `[CV]` build: training on Colab's free tier (ADR 0007; Explorer is the
+  fallback). `minifsd.train.pack` zips a dataset folder uncompressed for Google
+  Drive; a thin notebook mounts Drive, installs the repo from GitHub at a pinned
+  commit, copies and unzips the data, and calls `minifsd.train` modules;
+  checkpoints go to Drive every epoch and runs resume from them. Test: a pack
+  and unpack round trip keeps every file byte for byte; a training module's
+  smoke run on 20 images on CPU (the `cv` environment) writes a checkpoint and
+  resumes from it.
 - [ ] T3 `[CV]` feat(train): dataset adapters from v9 and COCO people to each
   trainer's format: YOLO txt labels, RF-DETR's COCO folders, and floor-mask
   pairs for segmentation. Decide before starting how COCO images avoid teaching
@@ -393,9 +395,6 @@ Not decided yet. Each has the step where it must be settled.
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
 
-- **Explorer access** (T2). Confirm the account works, SSH keys are set up, and
-  the scratch quota fits v9 (1.4 GB) plus COCO people (about 1 GB).
-
 - **Depth Anything 3 Small gives relative depth only** (V5, M3). Metric scale
   must come from known camera height and the floor plane.
 
@@ -408,8 +407,8 @@ Not decided yet. Each has the step where it must be settled.
 - **CoreML INT8 on an M1 saves size, not time** (M5). The Neural Engine is not
   reachable from Docker. First thing to cut from E6.
 
-- **Explorer limits** (M3): `gpu` partition 8 h max, 1 GPU per job; SSH keys
-  required since Nov 6, 2026. Training must checkpoint and resume.
+- **Explorer limits** (fallback only, ADR 0007): `gpu` partition 8 h max, 1 GPU
+  per job; SSH keys required since Nov 6, 2026.
 
 - **YOLO26 is AGPL-3.0** (M3). Decide whether that affects the repo license (ADR
   0006\) or how ultralytics is used.
@@ -689,3 +688,6 @@ Add a row at the end of each session.
   `pixi run lint` is `pre-commit run --all-files`, which skips untracked files,
   so a new file's lint errors showed up only at commit (D301 twice). Hooks now
   run on new files by name before a commit is handed over.
+- **2026-11-25** Training moves from Explorer to Colab's free tier (ADR 0007):
+  no time to set up the cluster before the report. Data on Google Drive as zips,
+  code in `src/minifsd/train`, thin notebook, checkpoints to Drive every epoch.
