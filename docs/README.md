@@ -9,6 +9,8 @@ Start with the design, then the implementation plan for the current step.
 - [Implementation plan](implementation-plan.md): build order, current step,
   testing ladder, open follow-ups and the decisions log.
 - [Repository layout](repo.md): where code and docs live.
+- [Real photo protocol](real-photo-protocol.md): how the real photo set is taken
+  (heights, settings, counts, split).
 - [Proposal](proposal/): the Nov 10 proposal PDF and pitch notes.
 
 ## Decisions
