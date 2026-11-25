@@ -275,7 +275,7 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   seeds as v8. Test: the split check; box counts per class per split recorded
   here; harness sanity run.
 
-- [ ] D10 `[CV]` data: COCO person subset for the detector's person class
+- [x] D10 `[CV]` data: COCO person subset for the detector's person class
   (decided 2026-11-25, option 3): COCO 2017 images that hold a person of at
   least 32 x 32 px, about 5k train and 500 val, from the full instances files.
   People keep their boxes, and COCO's furniture and floor clutter (chair, couch,
@@ -321,7 +321,7 @@ NYUv2 val subset (from NYUv2 train, so NYUv2 test stays clean), and real floor
 15 confirms the pick once P3 is done. If behind, the design's rule holds: 2
 candidates per experiment.
 
-- [ ] T1 `[CV]` feat(eval): detection metrics in the harness: mAP at IoU 0.5 per
+- [x] T1 `[CV]` feat(eval): detection metrics in the harness: mAP at IoU 0.5 per
   class and averaged, written in our code (VOC-style all-point interpolation)
   rather than adding pycocotools. Crowd regions are ignored, as in COCO. Test:
   perfect boxes give 1.0; boxes shifted past IoU 0.5 give 0; a missed object
@@ -675,3 +675,17 @@ Add a row at the end of each session.
   233; frames with no box: 25% of train, 26% of val, 27% of test. Harness sanity
   run, classical floor baseline on val: IoU 0.466 (v8: 0.465), so the door
   frames and signs did not change the floor task.
+- **2026-11-25** D10 COCO people, option (a): train 5,000 images (19,569 people,
+  6,504 obstacles, 791 MB), val 500 (2,096 people, 937 obstacles, 79 MB), seed
+  0, from the full instances files. Every image checked: it decodes at the size
+  its annotation gives. Surprise: COCO's server reset the connection after 4,063
+  train images; the half-file guard held (nothing partial on disk), and
+  `download` now retries each image up to 4 times with backoff, then resumed the
+  rest. The server answers over HTTP only.
+- **2026-11-25** T1 detection mAP in `minifsd.eval.detection`, VOC all-point AP
+  at IoU 0.5, crowd regions ignored by COCO's rule (a detection mostly inside
+  one is neither hit nor false alarm). The harness has a `detect` task and
+  `coco:<folder>` datasets (v9 splits, COCO people). Process note:
+  `pixi run lint` is `pre-commit run --all-files`, which skips untracked files,
+  so a new file's lint errors showed up only at commit (D301 twice). Hooks now
+  run on new files by name before a commit is handed over.
