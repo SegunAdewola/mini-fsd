@@ -219,7 +219,7 @@ real-photo steps are written once D6 is done.
   ROS sim keeps its fixed level camera at 0.5 m. Test: rendered floor pixels
   back-project to the floor plane (z = 0) for several heights, pitches and
   rolls, using camera math written independently in the test.
-- [ ] D2 `[CV]` feat(world): vertical field of view 50 to 75 degrees per plan,
+- [x] D2 `[CV]` feat(world): vertical field of view 50 to 75 degrees per frame,
   with intrinsics recorded per frame. Test: the recorded intrinsics match the
   rendered geometry.
 - [ ] D3 `[CV]` feat(world): floor, wall and ceiling appearance per plan (flat,
@@ -451,3 +451,10 @@ Add a row at the end of each session.
   cm for five poses. A camera tilted down at robot height saw the robot's own
   top, so the robot body moved to geom group 3, which cameras don't render;
   collisions are unchanged.
+- **2026-11-24** D2 field of view, per frame instead of per plan as first
+  written: MuJoCo's `cam_fovy` changes at runtime like the camera pose, so each
+  plan gets 20 lenses at no cost. `CameraPose` became `CameraSetup`, since it
+  now holds a lens property too. `Sim.intrinsics()` reports what the camera
+  renders with, and meta.jsonl records each frame's own intrinsics. Check that
+  the test bites: rendering at 75 degrees and back-projecting with 50-degree
+  intrinsics bends the floor by 0.29 m against the 3 cm bound.
