@@ -5,6 +5,8 @@ never enough: MuJoCo has to accept it, and the compiled model has to have the
 parts the simulator (R3) and the ROS node (R5) look up by name.
 """
 
+import dataclasses
+
 import mujoco
 import numpy as np
 import pytest
@@ -162,3 +164,110 @@ def test_clutter_boxes_are_solid_and_turned_by_their_yaw() -> None:
     x_axis = data.geom("clutter_0").xmat.reshape(3, 3)[:, 0]
     np.testing.assert_allclose(x_axis, [np.cos(0.7), np.sin(0.7), 0], atol=1e-9)
     assert geom.contype[0] == 1 and geom.conaffinity[0] == 1  # robot hits it
+
+
+# D3: a look that differs from the default in every colour, so a test can
+# tell which colour ended up where.
+LOOK = mjcf.Appearance(
+    floor_rgb=(0.2, 0.3, 0.6),
+    floor_rgb2=(0.9, 0.8, 0.1),
+    floor_period_m=0.5,
+    wall_rgb=(0.3, 0.6, 0.3),
+    ceiling_rgb=(0.6, 0.2, 0.2),
+)
+
+
+def _floor_texels(model: mujoco.MjModel) -> np.ndarray:
+    """The floor texture's pixels as (n, 3) floats in [0, 1]."""
+    t = model.texture(mjcf.FLOOR_TEXTURE)
+    channels = int(t.nchannel[0])
+    n = int(t.width[0] * t.height[0]) * channels
+    texels = model.tex_data[int(t.adr[0]) : int(t.adr[0]) + n]
+    return np.asarray(texels.reshape(-1, channels)[:, :3] / 255.0)
+
+
+def _share_of(texels: np.ndarray, rgb: tuple[float, ...]) -> float:
+    """Fraction of texels that are this colour (to MuJoCo's 8 bits)."""
+    return float(np.all(np.abs(texels - rgb) < 1.5 / 255, axis=1).mean())
+
+
+def test_the_default_look_keeps_the_old_colours() -> None:
+    # The ROS sim and every earlier test use the default, so it must look
+    # like the world did before D3: a two-tone beige checker floor, light
+    # grey walls and ceiling.
+    look = mjcf.Appearance()
+    assert look.floor_kind == "checker"
+    model = _compile(PLAN)
+    texels = _floor_texels(model)
+    assert _share_of(texels, (0.55, 0.5, 0.45)) == pytest.approx(0.5)
+    assert _share_of(texels, (0.45, 0.4, 0.35)) == pytest.approx(0.5)
+    np.testing.assert_allclose(model.geom("wall_0").rgba, (0.85, 0.85, 0.8, 1))
+    np.testing.assert_allclose(
+        model.geom(mjcf.CEILING).rgba, (0.92, 0.92, 0.9, 1)
+    )
+
+
+# Share of floor texels in the second colour, per kind. Checker is half
+# and half; tiles are grout lines a texel wide at the tile edges; carpet is
+# random flecks; plain has none.
+SECOND_COLOUR_SHARE = {
+    "checker": (0.45, 0.55),
+    "tiles": (0.001, 0.05),
+    "carpet": (mjcf.CARPET_FLECKS - 0.02, mjcf.CARPET_FLECKS + 0.02),
+    "plain": (0.0, 0.0),
+}
+
+
+@pytest.mark.parametrize("kind", mjcf.FLOOR_KINDS)
+def test_each_floor_kind_is_its_own_pattern(kind: str) -> None:
+    assert set(SECOND_COLOUR_SHARE) == set(mjcf.FLOOR_KINDS)
+    look = dataclasses.replace(LOOK, floor_kind=kind)
+    model = mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(PLAN, appearance=look)
+    )
+    texels = _floor_texels(model)
+    first = _share_of(texels, look.floor_rgb)
+    second = _share_of(texels, look.floor_rgb2)
+    assert first + second == pytest.approx(1.0)  # no other colours
+    low, high = SECOND_COLOUR_SHARE[kind]
+    assert low <= second <= high
+
+
+def test_floor_pattern_repeats_every_period_in_metres() -> None:
+    # texuniform makes texrepeat "repeats per metre", so a 0.5 m tile is
+    # 0.5 m in every floor plan, whatever its size.
+    look = dataclasses.replace(LOOK, floor_kind="tiles")
+    model = mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(PLAN, appearance=look)
+    )
+    mat = model.material(mjcf.FLOOR_MATERIAL)
+    assert mat.texuniform[0]
+    np.testing.assert_allclose(mat.texrepeat, [2.0, 2.0])
+
+
+def test_walls_and_ceiling_take_the_look_colours() -> None:
+    look = LOOK
+    model = mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(PLAN, appearance=look)
+    )
+    for i in range(len(PLAN.walls)):
+        np.testing.assert_allclose(
+            model.geom(f"wall_{i}").rgba[:3], look.wall_rgb, rtol=1e-6
+        )
+    np.testing.assert_allclose(
+        model.geom(mjcf.CEILING).rgba[:3], look.ceiling_rgb, rtol=1e-6
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"floor_kind": "marble"},
+        {"floor_rgb": (1.2, 0.5, 0.5)},
+        {"wall_rgb": (0.5, -0.1, 0.5)},
+        {"floor_period_m": 0.0},
+    ],
+)
+def test_rejects_a_look_mujoco_cannot_draw(bad: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        mjcf.Appearance(**bad)  # type: ignore[arg-type]

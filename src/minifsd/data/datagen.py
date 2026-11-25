@@ -12,9 +12,9 @@ remembering a floor it trained on.
 
 Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
 distractors, and each frame its own camera: from robot height to a handheld
-phone tilted down (D1), with its own field of view (D2). Textures and
-lighting are still fixed; the rest of domain randomization follows in M2 (D3
-to D5).
+phone tilted down (D1), with its own field of view (D2). Each plan also
+gets its own floor pattern and colours (D3). Lighting is still fixed; the
+rest of domain randomization follows in M2 (D4 and D5).
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -24,6 +24,7 @@ Output, per split folder:
 """
 
 import argparse
+import colorsys
 import dataclasses
 import json
 import math
@@ -51,6 +52,17 @@ MAX_ROLL = math.radians(5.0)
 # is about 55 to 65 degrees in 4:3 landscape; the range goes either side so
 # models don't learn one focal length.
 FOVY_RANGE_DEG = (50.0, 75.0)
+# D3 looks. Most plans get muted colours, like real buildings: greys,
+# beiges, browns, dull blues. WILD_FRACTION of them get any colour at all,
+# which stops a model from learning "floor is a muted colour" (option c).
+WILD_FRACTION = 0.2
+MUTED_MAX_SATURATION = 0.3  # HSV saturation, 0 grey to 1 pure colour
+FLOOR_PERIOD_RANGE_M = (0.3, 2.0)  # small tiles to big checker squares
+# HSV value (brightness) per surface. Ceilings are the lightest, walls
+# mostly light, floors anything from dark carpet to pale tile.
+FLOOR_VALUE_RANGE = (0.15, 0.85)
+WALL_VALUE_RANGE = (0.45, 0.95)
+CEILING_VALUE_RANGE = (0.75, 1.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -67,6 +79,7 @@ class Frame:
     depth: np.ndarray  # (H, W) float32, metres along the viewing axis
     floor: np.ndarray  # (H, W) bool
     camera: sim.CameraSetup = sim.CameraSetup()
+    appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE
 
 
 def seeds_for(split: str, n: int) -> list[int]:
@@ -159,11 +172,93 @@ def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraSetup]:
     ]
 
 
+def sample_appearances(
+    n: int, rng: np.random.Generator
+) -> list[mjcf.Appearance]:
+    """Random looks: mostly muted colours, WILD_FRACTION in any colour.
+
+    Args:
+        n: How many.
+        rng: The random source; the same state gives the same looks.
+
+    Returns:
+        n looks, each a valid mjcf.Appearance.
+    """
+    looks = []
+    for _ in range(n):
+        wild = bool(rng.random() < WILD_FRACTION)
+        kind = str(rng.choice(mjcf.FLOOR_KINDS))
+        period = float(rng.uniform(*FLOOR_PERIOD_RANGE_M))
+        floor_rgb = _colour(rng, wild, FLOOR_VALUE_RANGE)
+        floor_rgb2 = _shade(rng, floor_rgb)
+        wall_rgb = _colour(rng, wild, WALL_VALUE_RANGE)
+        ceiling_rgb = _colour(rng, wild, CEILING_VALUE_RANGE)
+        looks.append(
+            mjcf.Appearance(
+                floor_kind=kind,
+                floor_rgb=floor_rgb,
+                floor_rgb2=floor_rgb2,
+                floor_period_m=period,
+                wall_rgb=wall_rgb,
+                ceiling_rgb=ceiling_rgb,
+            )
+        )
+    return looks
+
+
+def _colour(
+    rng: np.random.Generator,
+    wild: bool,
+    value_range: tuple[float, float],
+) -> mjcf.RGB:
+    """One colour, drawn in HSV so "muted" is just a saturation cap.
+
+    Args:
+        rng: The random source.
+        wild: True for any hue and saturation; False caps saturation at
+            MUTED_MAX_SATURATION.
+        value_range: HSV value (brightness) bounds, 0 black to 1 white.
+
+    Returns:
+        (r, g, b), each in [0, 1].
+    """
+    hue = rng.uniform(0.0, 1.0)
+    saturation = rng.uniform(0.0, 1.0 if wild else MUTED_MAX_SATURATION)
+    value = rng.uniform(*value_range)
+    r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+    return (float(r), float(g), float(b))
+
+
+def _shade(rng: np.random.Generator, rgb: mjcf.RGB) -> mjcf.RGB:
+    """A darker or lighter shade of the same hue, for the second floor colour.
+
+    Grout, carpet flecks and the other checker square are usually the floor's
+    own colour, darker or lighter, not an unrelated one.
+
+    Args:
+        rng: The random source.
+        rgb: The main floor colour.
+
+    Returns:
+        (r, g, b), each in [0, 1], different from rgb.
+    """
+    if rng.random() < 0.5:
+        k = rng.uniform(0.4, 0.75)  # darker: scale towards black
+        return (float(rgb[0] * k), float(rgb[1] * k), float(rgb[2] * k))
+    t = rng.uniform(0.3, 0.6)  # lighter: mix towards white
+    return (
+        float(rgb[0] + (1 - rgb[0]) * t),
+        float(rgb[1] + (1 - rgb[1]) * t),
+        float(rgb[2] + (1 - rgb[2]) * t),
+    )
+
+
 def render_frames(
     plan: floor_plan.FloorPlan,
     poses: Sequence[floor_plan.Pose2D],
     clutter: Sequence[clutter_lib.Box] = (),
     cameras: Sequence[sim.CameraSetup] | None = None,
+    appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE,
 ) -> Iterator[Frame]:
     """Renders one frame per pose.
 
@@ -173,13 +268,14 @@ def render_frames(
         clutter: Boxes standing in the world (distractors).
         cameras: One camera pose per robot pose; None for the robot's own
             camera throughout.
+        appearance: The plan's look, the same for all its frames.
 
     Yields:
         The frames, in pose order.
     """
     if cameras is None:
         cameras = [sim.CameraSetup()] * len(poses)
-    s = sim.Sim(plan, clutter=clutter)
+    s = sim.Sim(plan, clutter=clutter, appearance=appearance)
     try:
         for i, (pose, cam) in enumerate(zip(poses, cameras, strict=True)):
             s.set_pose(pose)
@@ -192,6 +288,7 @@ def render_frames(
                 depth=s.render_depth(),
                 floor=s.render_floor_mask(),
                 camera=cam,
+                appearance=appearance,
             )
     finally:
         s.close()
@@ -231,6 +328,7 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         "camera_pitch": frame.camera.pitch,
         "camera_roll": frame.camera.roll,
         "intrinsics": dataclasses.asdict(k),
+        "appearance": dataclasses.asdict(frame.appearance),
     }
     with (out_dir / "meta.jsonl").open("a") as f:
         f.write(json.dumps(meta) + "\n")
@@ -313,7 +411,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         cameras = sample_cameras(
             args.frames_per_plan, np.random.default_rng([seed, 3])
         )
-        for frame in render_frames(plan, poses, boxes, cameras):
+        (look,) = sample_appearances(1, np.random.default_rng([seed, 4]))
+        for frame in render_frames(plan, poses, boxes, cameras, look):
             write_frame(frame, out)
             total += 1
     print(f"{total} frames from {args.plans} plans in {out}/")

@@ -77,6 +77,7 @@ class Sim:
         plan: floor_plan.FloorPlan,
         watchdog_timeout: float = WATCHDOG_TIMEOUT,
         clutter: Sequence[clutter_lib.Box] = (),
+        appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE,
     ) -> None:
         """Builds the model and puts the robot at the plan's spawn pose.
 
@@ -84,11 +85,13 @@ class Sim:
             plan: The floor plan to simulate.
             watchdog_timeout: Seconds without a command before stopping.
             clutter: Boxes in the world but not in the floor plan.
+            appearance: Colours and floor pattern (D3).
         """
         self.plan = plan
         self.clutter = tuple(clutter)
+        self.appearance = appearance
         self.model = mujoco.MjModel.from_xml_string(
-            mjcf.build_mjcf(plan, self.clutter)
+            mjcf.build_mjcf(plan, self.clutter, appearance)
         )
         self.data = mujoco.MjData(self.model)
         spawn = self.model.key(mjcf.SPAWN_KEY).id

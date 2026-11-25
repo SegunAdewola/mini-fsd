@@ -1,15 +1,19 @@
 """Builds a MuJoCo model (MJCF XML) from a FloorPlan.
 
 The model has a floor, one box per wall, a sign plate beside each door, and
-the robot. The robot is a planar base (ADR 0002): two slide joints (x, y) and
-a hinge (yaw), each driven by a velocity actuator, with a forward camera on
-top. The simulator (R3) turns a unicycle command (forward speed, turn rate)
-into the three joint velocities.
+the robot. How the floor, walls and ceiling look is an Appearance (D3); the
+default is the fixed look the ROS sim uses.
+
+The robot is a planar base (ADR 0002): two slide joints (x, y) and a hinge
+(yaw), each driven by a velocity actuator, with a forward camera on top. The
+simulator (R3) turns a unicycle command (forward speed, turn rate) into the
+three joint velocities.
 
 Names that other code looks up (joints, actuators, camera, the spawn key) are
 module constants, so a rename breaks the tests here, not inside ROS.
 """
 
+import dataclasses
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -50,11 +54,73 @@ MAX_TURN = 3.0  # rad/s
 KV_LINEAR = 200.0
 KV_YAW = 4.0  # yaw inertia is 0.5 * m * r^2 = 0.2 kg m^2, so also 0.05 s
 
-WALL_RGBA = (0.85, 0.85, 0.8, 1)
-CEILING_RGBA = (0.92, 0.92, 0.9, 1)
 CEILING_HALF_THICKNESS = 0.01
 SIGN_RGBA = (0.1, 0.3, 0.6, 1)
 ROBOT_RGBA = (0.9, 0.4, 0.1, 1)
+
+FLOOR_TEXTURE = "floor_tex"
+FLOOR_MATERIAL = "floor_mat"
+# D3 floor patterns, all MuJoCo built-in textures, so no image files:
+#   checker  two-colour squares, two each way per period
+#   tiles    one colour with grout lines in the second, one tile per period
+#   carpet   one colour flecked with the second
+#   plain    one colour (vinyl, polished concrete)
+FLOOR_KINDS = ("checker", "tiles", "carpet", "plain")
+CARPET_FLECKS = 0.3  # share of carpet texels in the second colour
+TEXTURE_SIZE = 256  # texels per side of one period
+
+RGB = tuple[float, float, float]
+
+
+@dataclasses.dataclass(frozen=True)
+class Appearance:
+    """How the floor, walls and ceiling of one floor plan look (D3).
+
+    The default is the fixed look from before D3, which the ROS sim keeps.
+    The data engine samples a new one per floor plan, so models can't learn
+    "floor is a beige checker".
+
+    Attributes:
+        floor_kind: One of FLOOR_KINDS.
+        floor_rgb: Main floor colour, each channel in [0, 1].
+        floor_rgb2: Second checker colour, grout or flecks; unused by plain.
+        floor_period_m: Metres per repeat of the floor pattern.
+        wall_rgb: Wall colour.
+        ceiling_rgb: Ceiling colour.
+    """
+
+    floor_kind: str = "checker"
+    floor_rgb: RGB = (0.55, 0.5, 0.45)
+    floor_rgb2: RGB = (0.45, 0.4, 0.35)
+    floor_period_m: float = 1.7  # about the old fixed tiling on a small plan
+    wall_rgb: RGB = (0.85, 0.85, 0.8)
+    ceiling_rgb: RGB = (0.92, 0.92, 0.9)
+
+    def __post_init__(self) -> None:
+        """Rejects looks MuJoCo can't draw.
+
+        Raises:
+            ValueError: For an unknown kind, a colour outside [0, 1] or a
+                period that isn't positive.
+        """
+        if self.floor_kind not in FLOOR_KINDS:
+            raise ValueError(
+                f"floor_kind must be one of {FLOOR_KINDS}, "
+                f"got {self.floor_kind!r}"
+            )
+        for name in ("floor_rgb", "floor_rgb2", "wall_rgb", "ceiling_rgb"):
+            rgb = getattr(self, name)
+            if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
+                raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
+        if self.floor_period_m <= 0:
+            raise ValueError(
+                f"floor_period_m must be positive, got {self.floor_period_m}"
+            )
+
+
+# The look from before D3. One shared instance, used as the default
+# argument (Appearance is frozen, so sharing it is safe).
+DEFAULT_APPEARANCE = Appearance()
 
 
 def _fmt(*values: float) -> str:
@@ -65,6 +131,7 @@ def _fmt(*values: float) -> str:
 def build_mjcf(
     plan: floor_plan.FloorPlan,
     clutter: Sequence["clutter_lib.Box"] = (),
+    appearance: Appearance = DEFAULT_APPEARANCE,
 ) -> str:
     """Returns MJCF XML for the floor plan with the robot at its spawn.
 
@@ -73,6 +140,7 @@ def build_mjcf(
         clutter: Boxes to stand on the floor. They are solid (the robot
             collides with them) but are not part of the floor plan, so they
             stay off Nav2's map.
+        appearance: Colours and floor pattern.
 
     Returns:
         The model as an XML string, ready for mujoco.MjModel.from_xml_string.
@@ -90,24 +158,7 @@ def build_mjcf(
     )
 
     asset = ET.SubElement(root, "asset")
-    ET.SubElement(
-        asset,
-        "texture",
-        name="floor_tex",
-        type="2d",
-        builtin="checker",
-        rgb1=".55 .5 .45",
-        rgb2=".45 .4 .35",
-        width="256",
-        height="256",
-    )
-    ET.SubElement(
-        asset,
-        "material",
-        name="floor_mat",
-        texture="floor_tex",
-        texrepeat="8 8",
-    )
+    _add_floor_texture(asset, appearance)
 
     world = ET.SubElement(root, "worldbody")
     # Directional lights with no shadows: even light in every room, like a
@@ -141,7 +192,7 @@ def build_mjcf(
         type="plane",
         size=_fmt(plan.length, plan.length, 0.1),
         pos=_fmt(plan.length / 2, 0, 0),
-        material="floor_mat",
+        material=FLOOR_MATERIAL,
         contype="0",
         conaffinity="0",
     )
@@ -163,7 +214,7 @@ def build_mjcf(
                 (wall.y_min + wall.y_max) / 2,
                 WALL_HEIGHT / 2,
             ),
-            rgba=_fmt(*WALL_RGBA),
+            rgba=_fmt(*appearance.wall_rgb, 1),
         )
 
     # Without a ceiling the camera sees empty sky above the walls once it
@@ -186,7 +237,7 @@ def build_mjcf(
             (min(ys) + max(ys)) / 2,
             WALL_HEIGHT + CEILING_HALF_THICKNESS,
         ),
-        rgba=_fmt(*CEILING_RGBA),
+        rgba=_fmt(*appearance.ceiling_rgb, 1),
         contype="0",
         conaffinity="0",
     )
@@ -248,6 +299,44 @@ def build_mjcf(
     ET.SubElement(keyframes, "key", name=SPAWN_KEY, qpos=_fmt(s.x, s.y, s.yaw))
 
     return ET.tostring(root, encoding="unicode")
+
+
+def _add_floor_texture(asset: ET.Element, look: Appearance) -> None:
+    """Adds the floor's texture and material for the look's floor kind."""
+    first, second = _fmt(*look.floor_rgb), _fmt(*look.floor_rgb2)
+    tex = {
+        "name": FLOOR_TEXTURE,
+        "type": "2d",
+        "width": str(TEXTURE_SIZE),
+        "height": str(TEXTURE_SIZE),
+    }
+    if look.floor_kind == "checker":
+        tex.update(builtin="checker", rgb1=first, rgb2=second)
+    elif look.floor_kind == "tiles":
+        # "edge" marks the texture's border, so each repeat is one tile.
+        tex.update(builtin="flat", rgb1=first, mark="edge", markrgb=second)
+    elif look.floor_kind == "carpet":
+        tex.update(
+            builtin="flat",
+            rgb1=first,
+            mark="random",
+            markrgb=second,
+            random=_fmt(CARPET_FLECKS),
+        )
+    else:  # plain
+        tex.update(builtin="flat", rgb1=first)
+    ET.SubElement(asset, "texture", tex)
+    # texuniform: texrepeat counts repeats per metre, not per floor, so a
+    # tile keeps its size whatever the size of the building.
+    repeats = 1.0 / look.floor_period_m
+    ET.SubElement(
+        asset,
+        "material",
+        name=FLOOR_MATERIAL,
+        texture=FLOOR_TEXTURE,
+        texrepeat=_fmt(repeats, repeats),
+        texuniform="true",
+    )
 
 
 def _add_robot(world: ET.Element) -> None:

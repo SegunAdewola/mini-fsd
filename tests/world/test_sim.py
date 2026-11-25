@@ -312,3 +312,47 @@ def test_reported_intrinsics_match_what_a_lens_renders(
 
 def test_the_default_setup_is_the_robot_camera() -> None:
     assert sim.CameraSetup().fovy_deg == mjcf.FOVY_DEG
+
+
+# D3 looks: every floor kind, in colours far from the default.
+LOOKS = [
+    mjcf.Appearance(
+        floor_kind=kind,
+        floor_rgb=(0.2, 0.3, 0.6),
+        floor_rgb2=(0.9, 0.8, 0.1),
+        floor_period_m=0.5,
+        wall_rgb=(0.3, 0.6, 0.3),
+        ceiling_rgb=(0.6, 0.2, 0.2),
+    )
+    for kind in mjcf.FLOOR_KINDS
+]
+
+
+@pytest.mark.gl
+@pytest.mark.parametrize("look", LOOKS, ids=lambda a: a.floor_kind)
+def test_the_floor_label_does_not_depend_on_the_look(
+    s: sim.Sim, look: mjcf.Appearance
+) -> None:
+    # Labels come from geom ids, not colours, so a new floor must change the
+    # picture and leave the floor mask exactly as it was.
+    other = sim.Sim(PLAN, appearance=look)
+    try:
+        for each in (s, other):
+            each.set_camera(sim.CameraSetup(1.2, math.radians(20.0), 0.0))
+        np.testing.assert_array_equal(
+            other.render_floor_mask(), s.render_floor_mask()
+        )
+        assert not np.array_equal(other.render_rgb(), s.render_rgb())
+    finally:
+        other.close()
+
+
+@pytest.mark.gl
+def test_the_same_look_renders_the_same_pixels() -> None:
+    a = sim.Sim(PLAN, appearance=LOOKS[2])
+    b = sim.Sim(PLAN, appearance=LOOKS[2])
+    try:
+        np.testing.assert_array_equal(a.render_rgb(), b.render_rgb())
+    finally:
+        a.close()
+        b.close()

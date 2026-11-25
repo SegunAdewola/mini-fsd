@@ -1,5 +1,6 @@
 """Tests for minifsd.data.datagen: sim frames with exact labels."""
 
+import colorsys
 import dataclasses
 import json
 import pathlib
@@ -204,3 +205,61 @@ def test_meta_records_each_frames_own_intrinsics(
         assert json.loads(line)["intrinsics"] == pytest.approx(
             dataclasses.asdict(k)
         )
+
+
+def _muted(rgb: tuple[float, float, float]) -> bool:
+    return colorsys.rgb_to_hsv(*rgb)[1] <= datagen.MUTED_MAX_SATURATION
+
+
+def _colours(a: mjcf.Appearance) -> list[tuple[float, float, float]]:
+    return [a.floor_rgb, a.floor_rgb2, a.wall_rgb, a.ceiling_rgb]
+
+
+@given(st.integers(min_value=0, max_value=2**32 - 1))
+def test_sampled_looks_stay_in_range(seed: int) -> None:
+    # Appearance itself rejects colours outside [0, 1] and unknown kinds,
+    # so building one is half the check.
+    looks = datagen.sample_appearances(50, np.random.default_rng(seed))
+    assert len(looks) == 50
+    low, high = datagen.FLOOR_PERIOD_RANGE_M
+    for a in looks:
+        assert a.floor_kind in mjcf.FLOOR_KINDS
+        assert low <= a.floor_period_m <= high
+        # The second floor colour must differ from the first, or a checker
+        # or carpet floor quietly turns plain.
+        if a.floor_kind != "plain":
+            assert a.floor_rgb != a.floor_rgb2
+
+
+def test_sampled_looks_are_mostly_muted_with_a_wild_share() -> None:
+    # Option (c): most buildings in muted colours, about WILD_FRACTION in
+    # any colour at all. A wild look can come out muted by chance, so the
+    # muted share is at least 1 - WILD_FRACTION, but not much more.
+    looks = datagen.sample_appearances(2000, np.random.default_rng(0))
+    muted = np.mean([all(_muted(c) for c in _colours(a)) for a in looks])
+    expected = 1 - datagen.WILD_FRACTION
+    assert expected - 0.04 <= muted <= expected + 0.06
+    # And every floor kind turns up.
+    assert {a.floor_kind for a in looks} == set(mjcf.FLOOR_KINDS)
+
+
+def test_sampled_looks_are_reproducible() -> None:
+    a = datagen.sample_appearances(5, np.random.default_rng(3))
+    b = datagen.sample_appearances(5, np.random.default_rng(3))
+    c = datagen.sample_appearances(5, np.random.default_rng(4))
+    assert a == b
+    assert a != c
+
+
+@pytest.mark.gl
+def test_meta_records_the_plans_look(tmp_path: pathlib.Path) -> None:
+    poses = datagen.sample_poses(PLAN, 2, np.random.default_rng(0))
+    look = mjcf.Appearance(floor_kind="carpet", floor_rgb2=(0.3, 0.3, 0.3))
+    frames = list(datagen.render_frames(PLAN, poses, appearance=look))
+    assert all(f.appearance == look for f in frames)
+    for f in frames:
+        datagen.write_frame(f, tmp_path)
+    for line in (tmp_path / "meta.jsonl").read_text().splitlines():
+        meta = json.loads(line)["appearance"]
+        assert meta["floor_kind"] == "carpet"
+        assert meta["floor_rgb2"] == pytest.approx([0.3, 0.3, 0.3])
