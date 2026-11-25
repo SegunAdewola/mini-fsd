@@ -44,3 +44,12 @@ CLAUDE.md
 # Paper PDFs (see docs/papers.md) and downloaded Vale style packages
 /papers/
 .vale/styles/
+
+# Course submissions (kept local): the progress update and its builder, and
+# the course's requirement PDFs
+/docs/progress-update/
+/docs/Final Project*.pdf
+
+# uv run --with (used once to build the progress update PDF) leaves these
+uv.lock
+.venv/
