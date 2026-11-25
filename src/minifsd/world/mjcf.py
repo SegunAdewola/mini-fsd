@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from minifsd.geometry import frames
-from minifsd.world import floor_plan
+from minifsd.world import floor_plan, signs
 
 if TYPE_CHECKING:  # clutter imports this module, so only for type hints
     from minifsd.world import clutter as clutter_lib
@@ -57,7 +57,6 @@ KV_LINEAR = 200.0
 KV_YAW = 4.0  # yaw inertia is 0.5 * m * r^2 = 0.2 kg m^2, so also 0.05 s
 
 CEILING_HALF_THICKNESS = 0.01
-SIGN_RGBA = (0.1, 0.3, 0.6, 1)
 ROBOT_RGBA = (0.9, 0.4, 0.1, 1)
 
 FLOOR_TEXTURE = "floor_tex"
@@ -101,6 +100,10 @@ class Appearance:
             the way they face.
         side_light_dir: Direction the angled light shines; must point
             down (z < 0). Need not be unit length.
+        sign_rgb: Colour of the sign plates (D7).
+        sign_text_rgb: Colour of the room numbers on them.
+        sign_font: A font name from signs.FONTS.
+        sign_word: A word from signs.WORDS above the number, or "" for none.
     """
 
     floor_kind: str = "checker"
@@ -114,6 +117,10 @@ class Appearance:
     main_light: float = 0.6
     side_light: float = 0.35
     side_light_dir: tuple[float, float, float] = (1.0, 0.4, -0.6)
+    sign_rgb: RGB = (0.1, 0.3, 0.6)
+    sign_text_rgb: RGB = (1.0, 1.0, 1.0)
+    sign_font: str = "simplex"
+    sign_word: str = ""
 
     def __post_init__(self) -> None:
         """Rejects looks MuJoCo can't draw.
@@ -127,7 +134,24 @@ class Appearance:
                 f"floor_kind must be one of {FLOOR_KINDS}, "
                 f"got {self.floor_kind!r}"
             )
-        for name in ("floor_rgb", "floor_rgb2", "wall_rgb", "ceiling_rgb"):
+        if self.sign_font not in signs.FONTS:
+            raise ValueError(
+                f"sign_font must be one of {tuple(signs.FONTS)}, "
+                f"got {self.sign_font!r}"
+            )
+        if self.sign_word not in ("", *signs.WORDS):
+            raise ValueError(
+                f"sign_word must be '' or one of {signs.WORDS}, "
+                f"got {self.sign_word!r}"
+            )
+        for name in (
+            "floor_rgb",
+            "floor_rgb2",
+            "wall_rgb",
+            "ceiling_rgb",
+            "sign_rgb",
+            "sign_text_rgb",
+        ):
             rgb = getattr(self, name)
             if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
                 raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
@@ -190,6 +214,25 @@ def build_mjcf(
 
     asset = ET.SubElement(root, "asset")
     _add_floor_texture(asset, appearance)
+    for room in plan.rooms:
+        # A blank texture of the right size; signs.paint draws the number
+        # into it once the model is compiled.
+        ET.SubElement(
+            asset,
+            "texture",
+            name=signs.texture_name(room.number),
+            type="2d",
+            builtin="flat",
+            rgb1=_fmt(*appearance.sign_rgb),
+            width=str(signs.TEXTURE_WIDTH),
+            height=str(signs.TEXTURE_HEIGHT),
+        )
+        ET.SubElement(
+            asset,
+            "material",
+            name=signs.material_name(room.number),
+            texture=signs.texture_name(room.number),
+        )
 
     world = ET.SubElement(root, "worldbody")
     # Directional lights with no shadows: even light in every room, like a
@@ -285,6 +328,10 @@ def build_mjcf(
         # wall. Visual only: no contacts.
         x = room.door_x + plan.door_width / 2 + SIGN_GAP
         y = room.side * (half_hall - SIGN_HALF_SIZE[1])
+        # MuJoCo maps a texture onto a box face in one fixed direction, so
+        # the text reads correctly from -y and mirrored from +y. Signs on the
+        # right wall, seen from +y, are turned half round about z.
+        quat = "1 0 0 0" if room.side == floor_plan.LEFT else "0 0 0 1"
         ET.SubElement(
             world,
             "geom",
@@ -292,7 +339,8 @@ def build_mjcf(
             type="box",
             size=_fmt(*SIGN_HALF_SIZE),
             pos=_fmt(x, y, SIGN_HEIGHT),
-            rgba=_fmt(*SIGN_RGBA),
+            quat=quat,
+            material=signs.material_name(room.number),
             contype="0",
             conaffinity="0",
         )

@@ -17,7 +17,7 @@ import numpy as np
 
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
-from minifsd.world import floor_plan, mjcf
+from minifsd.world import floor_plan, mjcf, signs
 
 # Stop if no command arrives for this long. teleop and Nav2 both resend
 # commands at 10 Hz or more, so 0.3 s means 3 missed messages. With the
@@ -93,6 +93,7 @@ class Sim:
         self.model = mujoco.MjModel.from_xml_string(
             mjcf.build_mjcf(plan, self.clutter, appearance)
         )
+        signs.paint(self.model, plan, appearance)  # before any renderer
         self.data = mujoco.MjData(self.model)
         spawn = self.model.key(mjcf.SPAWN_KEY).id
         mujoco.mj_resetDataKeyframe(self.model, self.data, spawn)
@@ -240,15 +241,21 @@ class Sim:
         Uses MuJoCo's segmentation rendering, which reports the geom behind
         every pixel, so the mask is exact.
         """
+        return np.asarray(self.render_segmentation() == self._floor_geom)
+
+    def render_segmentation(self) -> np.ndarray:
+        """The geom id behind every camera pixel: (H, W) int, -1 for none.
+
+        Uses MuJoCo's segmentation rendering, so it is exact: model.geom(i)
+        names the geom a pixel shows.
+        """
         r = self._get_renderer()
         r.enable_segmentation_rendering()
         r.update_scene(self.data, camera=mjcf.CAMERA)
         seg = np.asarray(r.render())  # (H, W, 2): object id, object type
         r.disable_segmentation_rendering()
-        is_floor = (seg[..., 0] == self._floor_geom) & (
-            seg[..., 1] == mujoco.mjtObj.mjOBJ_GEOM
-        )
-        return np.asarray(is_floor, dtype=bool)
+        is_geom = seg[..., 1] == mujoco.mjtObj.mjOBJ_GEOM
+        return np.asarray(np.where(is_geom, seg[..., 0], -1))
 
     def close(self) -> None:
         """Frees the renderer's OpenGL context."""

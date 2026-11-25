@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 
 from minifsd.data import camera_effects, datagen
 from minifsd.geometry import frames
-from minifsd.world import clutter, floor_plan, mjcf, sim
+from minifsd.world import clutter, floor_plan, mjcf, signs, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
 
@@ -372,3 +372,24 @@ def test_poses_look_along_open_space(seed: int, n: int) -> None:
             x, y = p.x + t * np.cos(p.yaw), p.y + t * np.sin(p.yaw)
             assert _distance_to_walls(plan, x, y) > 0, (p, cam, t)
             assert not any(clutter.contains(b, x, y) for b in boxes), (p, t)
+
+
+def _luma(rgb: tuple[float, float, float]) -> float:
+    r, g, b = rgb
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def test_sampled_signs_are_readable_and_varied() -> None:
+    # D7: one sign style per building. Text must stand out from its plate
+    # whatever the draw, or the sign reader has nothing to read.
+    looks = datagen.sample_appearances(1000, np.random.default_rng(0))
+    for a in looks:
+        contrast = abs(_luma(a.sign_rgb) - _luma(a.sign_text_rgb))
+        assert contrast >= datagen.MIN_SIGN_CONTRAST, a
+    assert {a.sign_font for a in looks} == set(signs.FONTS)
+    worded = np.mean([a.sign_word != "" for a in looks])
+    assert abs(worded - datagen.SIGN_WORD_CHANCE) < 0.05
+    dark_text = np.mean(
+        [_luma(a.sign_text_rgb) < _luma(a.sign_rgb) for a in looks]
+    )
+    assert 0.4 < dark_text < 0.6  # both dark on light and light on dark

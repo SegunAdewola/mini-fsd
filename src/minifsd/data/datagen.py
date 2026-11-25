@@ -14,7 +14,8 @@ Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
 distractors, and each frame its own camera: from robot height to a handheld
 phone tilted down (D1), with its own field of view (D2). Each plan also
 gets its own floor pattern and colours (D3), and about half get glass room
-fronts (D3b). Lighting varies per plan too (D4). Last, each frame goes
+fronts (D3b). Lighting varies per plan too (D4), and so does the style
+of the room-number signs (D7). Last, each frame goes
 through camera effects (D5): blur, noise, exposure, gamma and JPEG.
 
 Output, per split folder:
@@ -38,7 +39,7 @@ from scipy import ndimage
 from minifsd.data import camera_effects
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
-from minifsd.world import floor_plan, mjcf, occupancy, sim
+from minifsd.world import floor_plan, mjcf, occupancy, signs, sim
 
 # Camera positions at least this far from any wall: the robot's radius
 # (0.2 m) plus room to spare, so the camera is never inside a wall.
@@ -82,6 +83,16 @@ AMBIENT_RANGE = (0.05, 0.35)
 MAIN_LIGHT_RANGE = (0.3, 0.8)
 SIDE_LIGHT_RANGE = (0.1, 0.5)
 SIDE_LIGHT_ELEVATION_DEG = (20.0, 70.0)
+# D7 sign style per building: dark text on a light plate or light on dark,
+# half each, so the text always stands out (brightness difference at least
+# MIN_SIGN_CONTRAST). Plates follow the same muted or wild colours as walls;
+# text stays near neutral, as on real signs.
+SIGN_WORD_CHANCE = 0.4
+MIN_SIGN_CONTRAST = 0.4
+LIGHT_PLATE_VALUE = (0.8, 1.0)
+DARK_PLATE_VALUE = (0.1, 0.35)
+DARK_TEXT_VALUE = (0.0, 0.2)
+LIGHT_TEXT_VALUE = (0.9, 1.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -294,6 +305,11 @@ def sample_appearances(
             float(math.cos(down) * math.sin(azimuth)),
             float(-math.sin(down)),
         )
+        ambient = float(rng.uniform(*AMBIENT_RANGE))
+        main_light = float(rng.uniform(*MAIN_LIGHT_RANGE))
+        side_light = float(rng.uniform(*SIDE_LIGHT_RANGE))
+        # Drawn last, so the D3 to D4 values above are unchanged.
+        sign_rgb, sign_text_rgb, sign_font, sign_word = _sign_style(rng, wild)
         looks.append(
             mjcf.Appearance(
                 floor_kind=kind,
@@ -303,13 +319,49 @@ def sample_appearances(
                 wall_rgb=wall_rgb,
                 ceiling_rgb=ceiling_rgb,
                 glass_share=glass,
-                ambient=float(rng.uniform(*AMBIENT_RANGE)),
-                main_light=float(rng.uniform(*MAIN_LIGHT_RANGE)),
-                side_light=float(rng.uniform(*SIDE_LIGHT_RANGE)),
+                ambient=ambient,
+                main_light=main_light,
+                side_light=side_light,
                 side_light_dir=side_dir,
+                sign_rgb=sign_rgb,
+                sign_text_rgb=sign_text_rgb,
+                sign_font=sign_font,
+                sign_word=sign_word,
             )
         )
     return looks
+
+
+def _sign_style(
+    rng: np.random.Generator, wild: bool
+) -> tuple[mjcf.RGB, mjcf.RGB, str, str]:
+    """One building's sign style: plate colour, text colour, font, word."""
+    dark_text = rng.random() < 0.5
+    plate_value = LIGHT_PLATE_VALUE if dark_text else DARK_PLATE_VALUE
+    text_value = DARK_TEXT_VALUE if dark_text else LIGHT_TEXT_VALUE
+    text = _colour(rng, False, text_value)
+    # HSV value is not brightness as seen: a saturated blue at value 0.8 is
+    # still dark. Redraw the plate until the text stands out.
+    for _ in range(50):
+        plate = _colour(rng, wild, plate_value)
+        if abs(_luma(plate) - _luma(text)) >= MIN_SIGN_CONTRAST:
+            break
+    else:
+        # Grey at the far end of the range: white against text of luma at
+        # most 0.2, or 0.1 against text of luma at least 0.63 (value 0.9,
+        # saturation 0.3). Both clear MIN_SIGN_CONTRAST.
+        v = plate_value[1] if dark_text else plate_value[0]
+        plate = (v, v, v)
+    font = str(rng.choice(list(signs.FONTS)))
+    word = (
+        str(rng.choice(signs.WORDS)) if rng.random() < SIGN_WORD_CHANCE else ""
+    )
+    return plate, text, font, word
+
+
+def _luma(rgb: mjcf.RGB) -> float:
+    """Brightness as the eye sees it (Rec. 601 weights)."""
+    return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
 
 def _colour(
