@@ -234,7 +234,7 @@ real-photo steps are written once D6 is done.
   only hallway fronts turn to glass.
 - [x] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
   Test: image brightness stays in range, never black or blown out.
-- [ ] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
+- [x] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
   exposure and gamma, JPEG artefacts) in a pure OpenCV module. Test: shape and
   dtype kept, labels untouched, same rng gives the same output (properties).
 - [ ] D6 `[CV]` data: generate v8, about 10k frames split by seed; record time
@@ -489,3 +489,11 @@ Add a row at the end of each session.
   plans, none with mean grey outside 30 to 225, more than 20% of pixels below
   10, or more than 5% clipped white. That test passed on the old fixed lights
   too, so it guards the new sampling rather than proving it.
+- **2026-11-25** D5 camera effects, in `minifsd.data.camera_effects`, applied in
+  a camera's order: defocus (half the frames, sigma 0.3 to 1.5 px) and motion
+  smear (30%, 1.5 to 6 px), then exposure gain 0.6 to 1.5 and sensor noise up to
+  sigma 8, then gamma 0.8 to 1.25, then JPEG at quality 40 to 95 (70%). Every
+  value is drawn whether its effect is on or not, so switching one off never
+  shifts the others. Effects are per frame, from `rng([seed, 6])`; meta.jsonl
+  records them. Labels never pass through the module. The default `Effects()`
+  returns the image unchanged.
