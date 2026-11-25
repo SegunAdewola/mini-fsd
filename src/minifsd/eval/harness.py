@@ -28,6 +28,7 @@ import re
 import resource
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Any, Literal
 
@@ -35,9 +36,10 @@ import numpy as np
 
 from minifsd.eval import depth as depth_eval
 from minifsd.eval import depth_align
+from minifsd.eval import detection as detection_eval
 from minifsd.eval import floor as floor_eval
 
-Task = Literal["floor", "depth"]
+Task = Literal["floor", "depth", "detect"]
 RESULTS = pathlib.Path("runs/harness/results.jsonl")
 # Read once by OpenMP, Apple Accelerate, OpenBLAS and MKL when they load.
 THREAD_ENV_VARS = (
@@ -52,11 +54,14 @@ FIT_IMAGES = 100  # train images for depth's global scale and shift (V5)
 
 @dataclasses.dataclass(frozen=True)
 class Candidate:
-    """A model under test: RGB in, a floor mask or relative disparity out."""
+    """A model under test: RGB in, its task's output out.
+
+    A floor mask, relative disparity, or a list of detection.Detection.
+    """
 
     name: str
     task: Task
-    predict: Callable[[np.ndarray], np.ndarray]
+    predict: Callable[[np.ndarray], Any]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -133,7 +138,7 @@ def evaluate(
     Returns:
         The result. Floor metrics: iou, iou_bottom_floor. Depth metrics:
         abs_rel and delta1, each with the per-image (oracle) and the global
-        fit.
+        fit. Detection metrics: map50 and ap50_<category>.
 
     Raises:
         ValueError: For a depth candidate without fit samples.
@@ -143,6 +148,8 @@ def evaluate(
         f = floor_eval.evaluate_floor(samples, candidate.predict)
         n, p50, p95 = f.n_images, f.p50_ms, f.p95_ms
         metrics = {"iou": f.iou, "iou_bottom_floor": f.iou_bottom_floor}
+    elif candidate.task == "detect":
+        n, p50, p95, metrics = _evaluate_detect(candidate, samples)
     else:
         if fit is None:
             raise ValueError("a depth candidate needs fit samples")
@@ -170,6 +177,62 @@ def evaluate(
         peak_rss_mb=peak_rss_mb(),
         threads=threads,
     )
+
+
+def _evaluate_detect(
+    candidate: Candidate, samples: Iterable[Any]
+) -> tuple[int, float, float, dict[str, float]]:
+    """Runs a detector over samples (rgb, truth); mAP and latency."""
+    found, truth, times = [], [], []
+    for s in samples:
+        start = time.perf_counter()
+        found.append(candidate.predict(s.rgb))
+        times.append(time.perf_counter() - start)
+        truth.append(s.truth)
+    scores = detection_eval.mean_average_precision(found, truth)
+    ms = np.array(times) * 1000
+    return (
+        len(times),
+        float(np.percentile(ms, 50)),
+        float(np.percentile(ms, 95)),
+        scores,
+    )
+
+
+@dataclasses.dataclass(frozen=True, eq=False)
+class CocoSample:
+    """One image of a COCO folder, with its boxes as detection ground truth."""
+
+    index: int
+    file_name: str
+    rgb: np.ndarray  # (H, W, 3) uint8
+    truth: list[detection_eval.Truth]
+
+
+def _load_coco(folder: pathlib.Path, limit: int | None) -> Iterator[CocoSample]:
+    """Streams a folder holding coco.json and its images (D8, D10)."""
+    import cv2
+
+    coco = json.loads((folder / "coco.json").read_text())
+    names = {c["id"]: c["name"] for c in coco["categories"]}
+    by_image: dict[int, list[detection_eval.Truth]] = {}
+    for a in coco["annotations"]:
+        x, y, w, h = a["bbox"]
+        by_image.setdefault(a["image_id"], []).append(
+            detection_eval.Truth(
+                names[a["category_id"]], x, y, w, h, crowd=bool(a["iscrowd"])
+            )
+        )
+    for i, image in enumerate(coco["images"][:limit]):
+        bgr = cv2.imread(str(folder / image["file_name"]), cv2.IMREAD_COLOR)
+        if bgr is None:
+            raise FileNotFoundError(folder / image["file_name"])
+        yield CocoSample(
+            index=i,
+            file_name=image["file_name"],
+            rgb=cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB),
+            truth=by_image.get(image["id"], []),
+        )
 
 
 def _git_commit() -> str:
@@ -281,12 +344,17 @@ def load_dataset(name: str, limit: int | None = None) -> Iterator[Any]:
     """Streams a dataset's samples.
 
     Names: "nyuv2-train", "nyuv2-test" (Eigen crop), "nyuv2-fit" (the fixed
-    sample of FIT_IMAGES train images used for depth's global fit), and
-    "sim:<folder>" for a data engine split such as sim:data/sim/v7/val.
+    sample of FIT_IMAGES train images used for depth's global fit),
+    "sim:<folder>" for a data engine split such as sim:data/sim/v7/val, and
+    "coco:<folder>" for a folder with coco.json (detection), such as
+    coco:data/sim/v9/val or coco:data/coco-people/val.
 
     Raises:
         ValueError: For an unknown name.
     """
+    if name.startswith("coco:"):
+        yield from _load_coco(pathlib.Path(name[5:]), limit)
+        return
     if name.startswith("sim:"):
         from minifsd.data import datagen
 

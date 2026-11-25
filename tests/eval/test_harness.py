@@ -150,3 +150,66 @@ def test_input_size_goes_into_the_candidate_name() -> None:
     )
     assert c.name == "depth-anything-v2-small@266"
     assert c.predict(np.zeros((240, 320, 3), np.uint8)).shape == (240, 320)
+
+
+def _coco_folder(tmp_path: pathlib.Path) -> pathlib.Path:
+    """Three tiny images and a COCO file, in the layout our data uses."""
+    from minifsd.data import boxes
+
+    found = [
+        [boxes.Box2D("door", "d0", 2, 3, 10, 12, 100)],
+        [
+            boxes.Box2D("room_sign", "s0", 20, 4, 6, 4, 24),
+            boxes.Box2D("obstacle", "c0", 1, 10, 8, 5, 40),
+        ],
+        [],
+    ]
+    images = []
+    for i, b in enumerate(found):
+        name = f"img{i}.png"
+        cv2.imwrite(
+            str(tmp_path / name), np.full((24, 32, 3), 40 * i, np.uint8)
+        )
+        images.append((name, 32, 24, b))
+    (tmp_path / "coco.json").write_text(json.dumps(boxes.to_coco(images)))
+    return tmp_path
+
+
+def test_scores_a_perfect_detector_from_a_coco_folder(
+    tmp_path: pathlib.Path,
+) -> None:
+    from minifsd.eval import detection
+
+    folder = _coco_folder(tmp_path)
+    samples = list(harness.load_dataset(f"coco:{folder}"))
+    assert len(samples) == 3
+    assert samples[0].rgb.shape == (24, 32, 3)
+    # The fake detector looks its image up by mean colour.
+    answers = {int(s.rgb.mean()): s.truth for s in samples}
+
+    def perfect(rgb: np.ndarray) -> list[detection.Detection]:
+        return [
+            detection.Detection(t.category, t.x, t.y, t.w, t.h, 1.0)
+            for t in answers[int(rgb.mean())]
+        ]
+
+    c = harness.Candidate("fake-detector", "detect", perfect)
+    r = harness.evaluate(c, samples, dataset="fake", threads=1)
+    assert r.task == "detect" and r.n_images == 3
+    assert r.metrics["map50"] == pytest.approx(1.0)
+    assert set(r.metrics) == {
+        "map50",
+        "ap50_door",
+        "ap50_obstacle",
+        "ap50_room_sign",
+    }
+    assert r.p95_ms >= r.p50_ms >= 0
+
+
+def test_coco_folders_keep_crowd_regions(tmp_path: pathlib.Path) -> None:
+    folder = _coco_folder(tmp_path)
+    coco = json.loads((folder / "coco.json").read_text())
+    coco["annotations"][0]["iscrowd"] = 1
+    (folder / "coco.json").write_text(json.dumps(coco))
+    first = next(iter(harness.load_dataset(f"coco:{folder}")))
+    assert first.truth[0].crowd
