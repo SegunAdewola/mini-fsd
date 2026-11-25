@@ -10,6 +10,8 @@ mini-fsd/
 │   │   ├── building.py          # Seeded hallway + numbered rooms (R1)
 │   │   ├── mjcf.py              # Layout -> MuJoCo XML, planar robot (R2)
 │   │   ├── sim.py               # MuJoCo wrapper: drive, watchdog, render (R3)
+│   │   ├── clutter.py           # Boxes on the floor as obstacles (V7)
+│   │   ├── signs.py             # Room numbers drawn on sign plates (D7)
 │   │   └── occupancy.py         # Layout -> Nav2 occupancy map (R7)
 │   ├── geometry/
 │   │   ├── frames.py            # Quaternions, optical frame, intrinsics (R4)
@@ -19,14 +21,22 @@ mini-fsd/
 │   │   └── depth_zero_shot.py   # Depth Anything wrapper (V5)
 │   ├── eval/
 │   │   ├── metrics.py           # IoU, AbsRel, delta1 (V1)
+│   │   ├── detection.py         # mAP at IoU 0.5 (T1)
 │   │   └── harness.py           # Accuracy + latency CLI for E1-E6 (V6)
 │   ├── data/
 │   │   ├── nyuv2.py             # NYU Depth V2 loader (V2)
-│   │   └── datagen.py           # Sim frames + labels, split by seed (V7)
+│   │   ├── datagen.py           # Sim frames + labels, split by seed (V7, D1-D9)
+│   │   ├── camera_effects.py    # Blur, noise, exposure, JPEG on renders (D5)
+│   │   ├── boxes.py             # Object boxes from renders, COCO files (D8)
+│   │   └── coco_people.py       # COCO person subset for detection (D10)
+│   ├── train/                   # Training on Colab (ADR 0007)
+│   │   └── pack.py              # Datasets zipped for Google Drive (T2)
 │   ├── mission/
 │   │   └── goals.py             # "go to room 103" -> goal pose (R9)
 │   └── demo/                    # Dec 15: folder of images -> overlays (V8)
 ├── tests/                       # pytest + Hypothesis, mirrors src/minifsd
+├── notebooks/
+│   └── train_colab.ipynb        # Thin Colab runner: Drive, install, train (T2)
 ├── ros2_ws/src/                 # ROS 2 packages: thin shells over minifsd
 │   ├── mini_fsd_sim/            # sim_node: clock, odom, TF, camera (R5)
 │   ├── mini_fsd_bringup/        # Launch files, RViz config, Nav2 params (R6, R8)
