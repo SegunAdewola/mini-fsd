@@ -222,7 +222,7 @@ real-photo steps are written once D6 is done.
 - [x] D2 `[CV]` feat(world): vertical field of view 50 to 75 degrees per frame,
   with intrinsics recorded per frame. Test: the recorded intrinsics match the
   rendered geometry.
-- [ ] D3 `[CV]` feat(world): floor, wall and ceiling appearance per plan (flat,
+- [x] D3 `[CV]` feat(world): floor, wall and ceiling appearance per plan (flat,
   tiles, speckled carpet) from MuJoCo's built-in procedural textures, no new
   dependency. Test: floor labels are the same under any texture; the same seed
   gives the same pixels and another seed different ones.
@@ -458,3 +458,11 @@ Add a row at the end of each session.
   renders with, and meta.jsonl records each frame's own intrinsics. Check that
   the test bites: rendering at 75 degrees and back-projecting with 50-degree
   intrinsics bends the floor by 0.29 m against the 3 cm bound.
+- **2026-11-25** D3 looks per plan: four floor kinds (checker, tiles, carpet,
+  plain) from MuJoCo's built-in textures, plus wall and ceiling colours. 80% of
+  plans get muted colours (HSV saturation at most 0.3), 20% any colour. The
+  floor pattern is now sized in metres (`texuniform`, 0.3 to 2 m per repeat);
+  before, it was 8 repeats across the whole floor, so tiles grew with the
+  building. The default look keeps the old colours at 1.7 m. Floor masks are
+  pixel-identical under every kind, since labels come from geom ids. The side
+  walls render almost black; that is lighting, left for D4.
