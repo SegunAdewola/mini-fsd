@@ -22,7 +22,9 @@ Output, per split folder:
     plan0000042_0007_rgb.png    RGB
     plan0000042_0007_floor.png  floor mask, 0 or 255
     plan0000042_0007_depth.png  depth, uint16 millimetres (NYUv2/TUM style)
-    meta.jsonl                  one line per frame: seed, pose, intrinsics
+    meta.jsonl                  one line per frame: seed, pose, intrinsics,
+                                look, effects, boxes
+    coco.json                   the boxes as a COCO detection file (D8)
 """
 
 import argparse
@@ -36,6 +38,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 from scipy import ndimage
 
+from minifsd.data import boxes as boxes_lib
 from minifsd.data import camera_effects
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
@@ -93,6 +96,8 @@ LIGHT_PLATE_VALUE = (0.8, 1.0)
 DARK_PLATE_VALUE = (0.1, 0.35)
 DARK_TEXT_VALUE = (0.0, 0.2)
 LIGHT_TEXT_VALUE = (0.9, 1.0)
+# D8 door frames per building: dark wood to pale paint or metal.
+DOOR_FRAME_VALUE_RANGE = (0.15, 0.9)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -111,6 +116,7 @@ class Frame:
     camera: sim.CameraSetup = sim.CameraSetup()
     appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE
     effects: camera_effects.Effects = camera_effects.Effects()
+    boxes: tuple[boxes_lib.Box2D, ...] = ()
 
 
 def with_effects(
@@ -310,6 +316,7 @@ def sample_appearances(
         side_light = float(rng.uniform(*SIDE_LIGHT_RANGE))
         # Drawn last, so the D3 to D4 values above are unchanged.
         sign_rgb, sign_text_rgb, sign_font, sign_word = _sign_style(rng, wild)
+        door_frame = _colour(rng, False, DOOR_FRAME_VALUE_RANGE)  # D8, last
         looks.append(
             mjcf.Appearance(
                 floor_kind=kind,
@@ -327,6 +334,7 @@ def sample_appearances(
                 sign_text_rgb=sign_text_rgb,
                 sign_font=sign_font,
                 sign_word=sign_word,
+                door_frame_rgb=door_frame,
             )
         )
     return looks
@@ -434,6 +442,9 @@ def render_frames(
     if cameras is None:
         cameras = [sim.CameraSetup()] * len(poses)
     s = sim.Sim(plan, clutter=clutter, appearance=appearance)
+    labelled = s.labelled_objects()
+    objects = {g: v for g, v in labelled.items() if v[0] != "door"}
+    doors = {g: v for g, v in labelled.items() if v[0] == "door"}
     try:
         for i, (pose, cam) in enumerate(zip(poses, cameras, strict=True)):
             s.set_pose(pose)
@@ -447,9 +458,25 @@ def render_frames(
                 floor=s.render_floor_mask(),
                 camera=cam,
                 appearance=appearance,
+                boxes=_boxes(s, objects, doors),
             )
     finally:
         s.close()
+
+
+def _boxes(
+    s: sim.Sim,
+    objects: dict[int, tuple[str, str]],
+    doors: dict[int, tuple[str, str]],
+) -> tuple[boxes_lib.Box2D, ...]:
+    """The frame's boxes, from two label renders (see sim.*_LABEL_GROUPS)."""
+    found = boxes_lib.boxes_from_ids(
+        s.render_segmentation(groups=sim.OBJECT_LABEL_GROUPS), objects
+    )
+    found += boxes_lib.boxes_from_ids(
+        s.render_segmentation(groups=sim.DOOR_LABEL_GROUPS), doors
+    )
+    return tuple(found)
 
 
 def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
@@ -488,9 +515,33 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         "intrinsics": dataclasses.asdict(k),
         "appearance": dataclasses.asdict(frame.appearance),
         "effects": dataclasses.asdict(frame.effects),
+        "boxes": [dataclasses.asdict(b) for b in frame.boxes],
     }
     with (out_dir / "meta.jsonl").open("a") as f:
         f.write(json.dumps(meta) + "\n")
+
+
+def write_coco(out_dir: pathlib.Path) -> None:
+    """Writes the split's boxes, from meta.jsonl, as out_dir/coco.json.
+
+    Args:
+        out_dir: A split folder written by write_frame.
+    """
+    images = []
+    with (out_dir / "meta.jsonl").open() as f:
+        for line in f:
+            meta = json.loads(line)
+            found = [boxes_lib.Box2D(**b) for b in meta["boxes"]]
+            images.append(
+                (
+                    f"{meta['stem']}_rgb.png",
+                    mjcf.IMAGE_WIDTH,
+                    mjcf.IMAGE_HEIGHT,
+                    found,
+                )
+            )
+    with (out_dir / "coco.json").open("w") as f:
+        json.dump(boxes_lib.to_coco(images), f)
 
 
 @dataclasses.dataclass(frozen=True, eq=False)
@@ -577,6 +628,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             effects = camera_effects.sample_effects(fx_rng)
             write_frame(with_effects(frame, effects, fx_rng), out)
             total += 1
+    write_coco(out)
     print(f"{total} frames from {args.plans} plans in {out}/")
 
 

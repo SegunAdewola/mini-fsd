@@ -72,6 +72,21 @@ TEXTURE_SIZE = 256  # texels per side of one period
 # D3b glass room fronts: a faint blue-green tint, mostly see-through.
 GLASS_RGBA = (0.6, 0.75, 0.75, 0.25)
 
+# Geom groups. MuJoCo's renderer draws groups 0 to 2 by default. Glass is in
+# group 1, drawn like any wall, so label renders can hide it and see through
+# (D8). Door panels are in group 4, never drawn by the camera; label renders
+# switch them on to see a door's opening. The robot's body is group 3.
+GLASS_GROUP = 1
+DOOR_PANEL_GROUP = 4
+
+# D8 door frames: jambs and a head around each opening, as on a real door,
+# and the wall closed above it. Visual only, so the robot and Nav2's map are
+# unchanged.
+DOOR_HEIGHT = 2.1
+FRAME_WIDTH = 0.06  # face width of a jamb or the head
+FRAME_PROUD = 0.02  # how far the frame stands out from each wall face
+PANEL_HALF_THICKNESS = 0.005
+
 RGB = tuple[float, float, float]
 
 
@@ -104,6 +119,7 @@ class Appearance:
         sign_text_rgb: Colour of the room numbers on them.
         sign_font: A font name from signs.FONTS.
         sign_word: A word from signs.WORDS above the number, or "" for none.
+        door_frame_rgb: Colour of the door frames (D8).
     """
 
     floor_kind: str = "checker"
@@ -121,6 +137,7 @@ class Appearance:
     sign_text_rgb: RGB = (1.0, 1.0, 1.0)
     sign_font: str = "simplex"
     sign_word: str = ""
+    door_frame_rgb: RGB = (0.45, 0.35, 0.25)  # wood
 
     def __post_init__(self) -> None:
         """Rejects looks MuJoCo can't draw.
@@ -151,6 +168,7 @@ class Appearance:
             "ceiling_rgb",
             "sign_rgb",
             "sign_text_rgb",
+            "door_frame_rgb",
         ):
             rgb = getattr(self, name)
             if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
@@ -277,7 +295,8 @@ def build_mjcf(
 
     glass = _glass_walls(plan, appearance.glass_share)
     for i, wall in enumerate(plan.walls):
-        rgba = GLASS_RGBA if i in glass else (*appearance.wall_rgb, 1)
+        is_glass = i in glass
+        rgba = GLASS_RGBA if is_glass else (*appearance.wall_rgb, 1)
         # MuJoCo box sizes are half-lengths, centred on pos.
         ET.SubElement(
             world,
@@ -295,6 +314,7 @@ def build_mjcf(
                 WALL_HEIGHT / 2,
             ),
             rgba=_fmt(*rgba),
+            group=str(GLASS_GROUP if is_glass else 0),
         )
 
     # Without a ceiling the camera sees empty sky above the walls once it
@@ -345,6 +365,9 @@ def build_mjcf(
             conaffinity="0",
         )
 
+    for room in plan.rooms:
+        _add_door(world, plan, room, appearance)
+
     for i, box in enumerate(clutter):
         # MuJoCo quaternions are (w, x, y, z); ours are ROS order (x, y, z, w).
         q = frames.yaw_to_quaternion(box.yaw)
@@ -384,6 +407,89 @@ def build_mjcf(
     ET.SubElement(keyframes, "key", name=SPAWN_KEY, qpos=_fmt(s.x, s.y, s.yaw))
 
     return ET.tostring(root, encoding="unicode")
+
+
+def door_geoms(number: int) -> tuple[str, ...]:
+    """Names of the geoms that make up a room's door: frame and panel.
+
+    The wall above the door (f"door_{number}_lintel") is wall, not door.
+    """
+    return tuple(
+        f"door_{number}_{part}"
+        for part in ("jamb_l", "jamb_r", "head", "panel")
+    )
+
+
+def _add_door(
+    world: ET.Element,
+    plan: floor_plan.FloorPlan,
+    room: floor_plan.Room,
+    look: Appearance,
+) -> None:
+    """Adds a door's frame, its hidden panel and the wall above it."""
+    half = plan.hallway_width / 2
+    t = floor_plan.WALL_THICKNESS
+    # The hallway wall spans |y| from half to half + t on the room's side.
+    y_mid = room.side * (half + t / 2)
+    left = room.door_x - plan.door_width / 2
+    right = room.door_x + plan.door_width / 2
+    frame_half_y = t / 2 + FRAME_PROUD
+    frame_rgba = _fmt(*look.door_frame_rgb, 1)
+
+    def box(
+        name: str,
+        x0: float,
+        x1: float,
+        z0: float,
+        z1: float,
+        rgba: str,
+        half_y: float = frame_half_y,
+        group: int = 0,
+    ) -> None:
+        ET.SubElement(
+            world,
+            "geom",
+            name=f"door_{room.number}_{name}",
+            type="box",
+            size=_fmt((x1 - x0) / 2, half_y, (z1 - z0) / 2),
+            pos=_fmt((x0 + x1) / 2, y_mid, (z0 + z1) / 2),
+            rgba=rgba,
+            group=str(group),
+            contype="0",
+            conaffinity="0",
+        )
+
+    # Jambs stand on the wall ends either side of the opening, so the
+    # opening keeps its full width.
+    box("jamb_l", left - FRAME_WIDTH, left, 0.0, DOOR_HEIGHT, rgba=frame_rgba)
+    box("jamb_r", right, right + FRAME_WIDTH, 0.0, DOOR_HEIGHT, rgba=frame_rgba)
+    box(
+        "head",
+        left - FRAME_WIDTH,
+        right + FRAME_WIDTH,
+        DOOR_HEIGHT,
+        DOOR_HEIGHT + FRAME_WIDTH,
+        rgba=frame_rgba,
+    )
+    box(
+        "lintel",
+        left,
+        right,
+        DOOR_HEIGHT + FRAME_WIDTH,
+        WALL_HEIGHT,
+        rgba=_fmt(*look.wall_rgb, 1),
+        half_y=t / 2,
+    )
+    box(
+        "panel",
+        left,
+        right,
+        0.0,
+        DOOR_HEIGHT,
+        rgba="1 0 1 1",  # never drawn by the camera; magenta if it ever is
+        half_y=PANEL_HALF_THICKNESS,
+        group=DOOR_PANEL_GROUP,
+    )
 
 
 def hallway_fronts(plan: floor_plan.FloorPlan) -> list[int]:

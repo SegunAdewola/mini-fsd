@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from minifsd.data import camera_effects, datagen
+from minifsd.data import boxes, camera_effects, datagen
 from minifsd.geometry import frames
 from minifsd.world import clutter, floor_plan, mjcf, signs, sim
 
@@ -393,3 +393,150 @@ def test_sampled_signs_are_readable_and_varied() -> None:
         [_luma(a.sign_text_rgb) < _luma(a.sign_rgb) for a in looks]
     )
     assert 0.4 < dark_text < 0.6  # both dark on light and light on dark
+
+
+def _project(s: sim.Sim, points: np.ndarray) -> np.ndarray:
+    """World points to pixel (col, row), written from MuJoCo's camera frame.
+
+    A MuJoCo camera looks along its own -z with +y up in the image; cam_xmat
+    holds its axes in world coordinates (columns).
+    """
+    cam = s.model.camera(mjcf.CAMERA).id
+    k = s.intrinsics()
+    centre = s.data.cam_xpos[cam]
+    axes = s.data.cam_xmat[cam].reshape(3, 3)
+    local = (points - centre) @ axes  # into the camera's own frame
+    depth = -local[:, 2]
+    cols = k.cx + k.fx * local[:, 0] / depth
+    rows = k.cy - k.fy * local[:, 1] / depth
+    return np.stack([cols, rows], axis=1)
+
+
+def _corners(s: sim.Sim, geom: str) -> np.ndarray:
+    g = s.data.geom(geom)
+    size = s.model.geom(geom).size
+    signs_ = np.array(
+        [[i, j, k] for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)]
+    )
+    return np.asarray(g.xpos + (signs_ * size) @ g.xmat.reshape(3, 3).T)
+
+
+def _box_of(frame: datagen.Frame, instance: str) -> boxes.Box2D | None:
+    return next((b for b in frame.boxes if b.instance == instance), None)
+
+
+def _facing(
+    room: floor_plan.Room, x: float, distance: float
+) -> floor_plan.Pose2D:
+    return floor_plan.Pose2D(x, -room.side * distance, room.side * np.pi / 2)
+
+
+@pytest.mark.gl
+def test_a_signs_box_matches_its_projected_corners() -> None:
+    room = PLAN.rooms[0]
+    x = room.door_x + PLAN.door_width / 2 + mjcf.SIGN_GAP
+    pose = _facing(room, x - 0.4, 0.5)  # a little to one side, so not square on
+    cam = sim.CameraSetup(1.3, 0.0, 0.0)
+    (frame,) = datagen.render_frames(PLAN, [pose], cameras=[cam])
+    b = _box_of(frame, f"sign_{room.number}")
+    assert b is not None and b.category == "room_sign"
+    s = sim.Sim(PLAN)
+    try:
+        s.set_pose(pose)
+        s.set_camera(cam)
+        uv = _project(s, _corners(s, f"sign_{room.number}"))
+    finally:
+        s.close()
+    # Pixel edges against projected corners: within 2 px allows for the
+    # rasterizer's half-pixel rule and the sign's thickness.
+    assert b.x == pytest.approx(uv[:, 0].min(), abs=2)
+    assert b.x + b.w == pytest.approx(uv[:, 0].max(), abs=2)
+    assert b.y == pytest.approx(uv[:, 1].min(), abs=2)
+    assert b.y + b.h == pytest.approx(uv[:, 1].max(), abs=2)
+
+
+@pytest.mark.gl
+def test_a_doors_box_spans_its_frame_jamb_to_jamb() -> None:
+    room = PLAN.rooms[0]
+    pose = _facing(room, room.door_x, 1.0)
+    cam = sim.CameraSetup(1.0, np.radians(5.0), 0.0, 70.0)
+    (frame,) = datagen.render_frames(PLAN, [pose], cameras=[cam])
+    b = _box_of(frame, f"door_{room.number}")
+    assert b is not None and b.category == "door"
+    s = sim.Sim(PLAN)
+    try:
+        s.set_pose(pose)
+        s.set_camera(cam)
+        left = _project(s, _corners(s, f"door_{room.number}_jamb_l"))
+        right = _project(s, _corners(s, f"door_{room.number}_jamb_r"))
+    finally:
+        s.close()
+    cols = np.concatenate([left[:, 0], right[:, 0]])
+    assert b.x == pytest.approx(max(cols.min(), 0), abs=2)
+    assert b.x + b.w == pytest.approx(min(cols.max(), mjcf.IMAGE_WIDTH), abs=2)
+    # Floor to head, or the image's bottom edge if the floor is out of view.
+    assert b.y + b.h >= mjcf.IMAGE_HEIGHT - 2 or b.h > 0.5 * mjcf.IMAGE_HEIGHT
+
+
+@pytest.mark.gl
+def test_an_obstacle_behind_glass_gets_a_box_and_a_hidden_one_does_not() -> (
+    None
+):
+    room = PLAN.rooms[0]
+    # One box inside the room behind the glass front, one behind a solid
+    # wall: the back wall of the room across the hallway.
+    inside = clutter.Box(
+        room.door_x + 1.0,
+        room.side * 2.0,
+        0.0,
+        0.3,
+        0.3,
+        0.8,
+        (0.8, 0.2, 0.2, 1),
+    )
+    other = next(r for r in PLAN.rooms if r.side != room.side)
+    hidden = clutter.Box(
+        other.door_x, other.side * 2.0, 0.0, 0.3, 0.3, 0.8, (0.2, 0.2, 0.8, 1)
+    )
+    glass = mjcf.Appearance(glass_share=1.0)
+    pose = _facing(room, room.door_x + 1.0, 0.4)
+    (frame,) = datagen.render_frames(
+        PLAN,
+        [pose],
+        clutter=(inside, hidden),
+        appearance=glass,
+        cameras=[sim.CameraSetup(1.0, np.radians(10.0), 0.0, 70.0)],
+    )
+    assert _box_of(frame, "clutter_0") is not None
+    assert _box_of(frame, "clutter_1") is None
+
+
+@pytest.mark.gl
+def test_boxes_go_into_meta_and_the_splits_coco_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    room = PLAN.rooms[0]
+    poses = [_facing(room, room.door_x, 1.0), PLAN.spawn]
+    frames = list(datagen.render_frames(PLAN, poses))
+    assert frames[0].boxes  # facing a door, it sees the door
+    for f in frames:
+        datagen.write_frame(f, tmp_path)
+    datagen.write_coco(tmp_path)
+    coco = json.loads((tmp_path / "coco.json").read_text())
+    assert [c["name"] for c in coco["categories"]] == list(boxes.CATEGORIES)
+    assert len(coco["images"]) == 2
+    assert coco["images"][0]["file_name"].endswith("_rgb.png")
+    assert len(coco["annotations"]) == sum(len(f.boxes) for f in frames)
+    for a in coco["annotations"]:
+        x, y, w, h = a["bbox"]
+        assert x >= 0 and x + w <= mjcf.IMAGE_WIDTH
+        assert y >= 0 and y + h <= mjcf.IMAGE_HEIGHT
+
+
+def test_door_frames_vary_from_building_to_building() -> None:
+    looks = datagen.sample_appearances(200, np.random.default_rng(0))
+    frames_ = {a.door_frame_rgb for a in looks}
+    assert len(frames_) == 200  # a colour per building
+    values = [max(c) for c in frames_]
+    lo, hi = datagen.DOOR_FRAME_VALUE_RANGE
+    assert all(lo - 1e-9 <= v <= hi + 1e-9 for v in values)

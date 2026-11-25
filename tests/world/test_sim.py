@@ -380,3 +380,38 @@ def test_glass_is_labelled_as_the_wall_it_is(s: sim.Sim) -> None:
         assert not np.array_equal(glass.render_rgb(), s.render_rgb())
     finally:
         glass.close()
+
+
+def test_labelled_objects_name_every_door_sign_and_box() -> None:
+    from minifsd.world import clutter
+
+    box = clutter.Box(2.0, 0.0, 0.0, 0.3, 0.3, 0.5, (0.4, 0.3, 0.2, 1.0))
+    s = sim.Sim(PLAN, clutter=(box,))
+    objects = s.labelled_objects()
+    by_instance: dict[str, set[str]] = {}
+    for _, (category, instance) in objects.items():
+        by_instance.setdefault(category, set()).add(instance)
+    numbers = {r.number for r in PLAN.rooms}
+    assert by_instance["door"] == {f"door_{n}" for n in numbers}
+    assert by_instance["room_sign"] == {f"sign_{n}" for n in numbers}
+    assert by_instance["obstacle"] == {"clutter_0"}
+    # Each door is its frame and its panel, not the wall above it.
+    door_geoms = {
+        s.model.geom(g).name for g, (c, _) in objects.items() if c == "door"
+    }
+    assert not any(name.endswith("lintel") for name in door_geoms)
+
+
+@pytest.mark.gl
+def test_door_panels_show_only_in_label_renders(s: sim.Sim) -> None:
+    room = PLAN.rooms[0]
+    # In the hallway, facing the door square on.
+    s.set_pose(
+        floor_plan.Pose2D(
+            room.door_x, -room.side * 0.6, room.side * math.pi / 2
+        )
+    )
+    panel = s.model.geom(f"door_{room.number}_panel").id
+    assert not (s.render_segmentation() == panel).any()
+    with_panels = s.render_segmentation(groups=sim.DOOR_LABEL_GROUPS)
+    assert (with_panels == panel).mean() > 0.1

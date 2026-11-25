@@ -25,6 +25,14 @@ from minifsd.world import floor_plan, mjcf, signs
 # last command.
 WATCHDOG_TIMEOUT = 0.3
 
+# Geom groups for label renders (D8). Obstacles and signs: everything the
+# camera draws except glass, so an object behind a glass front still gets
+# its label. Doors: the same plus the hidden door panels, which fill each
+# opening. Two renders, because the panels would hide objects seen through
+# an open doorway.
+OBJECT_LABEL_GROUPS = (0, 2)
+DOOR_LABEL_GROUPS = (0, 2, mjcf.DOOR_PANEL_GROUP)
+
 
 @dataclasses.dataclass(frozen=True)
 class CameraSetup:
@@ -243,19 +251,51 @@ class Sim:
         """
         return np.asarray(self.render_segmentation() == self._floor_geom)
 
-    def render_segmentation(self) -> np.ndarray:
+    def render_segmentation(
+        self, groups: Sequence[int] | None = None
+    ) -> np.ndarray:
         """The geom id behind every camera pixel: (H, W) int, -1 for none.
 
         Uses MuJoCo's segmentation rendering, so it is exact: model.geom(i)
         names the geom a pixel shows.
+
+        Args:
+            groups: Geom groups to draw, e.g. OBJECT_LABEL_GROUPS; None for
+                what the camera draws (groups 0 to 2).
         """
+        option = mujoco.MjvOption()
+        if groups is not None:
+            option.geomgroup[:] = 0
+            for g in groups:
+                option.geomgroup[g] = 1
         r = self._get_renderer()
         r.enable_segmentation_rendering()
-        r.update_scene(self.data, camera=mjcf.CAMERA)
+        r.update_scene(self.data, camera=mjcf.CAMERA, scene_option=option)
         seg = np.asarray(r.render())  # (H, W, 2): object id, object type
         r.disable_segmentation_rendering()
         is_geom = seg[..., 1] == mujoco.mjtObj.mjOBJ_GEOM
         return np.asarray(np.where(is_geom, seg[..., 0], -1))
+
+    def labelled_objects(self) -> dict[int, tuple[str, str]]:
+        """Geom id to (category, instance) for every object that gets a box.
+
+        Categories are minifsd.data.boxes' names: clutter boxes are
+        "obstacle", each door's frame and panel one "door", each sign a
+        "room_sign".
+        """
+        objects = {}
+        for i in range(len(self.clutter)):
+            g = self.model.geom(f"clutter_{i}").id
+            objects[g] = ("obstacle", f"clutter_{i}")
+        for room in self.plan.rooms:
+            sign = self.model.geom(f"sign_{room.number}").id
+            objects[sign] = ("room_sign", f"sign_{room.number}")
+            for name in mjcf.door_geoms(room.number):
+                objects[self.model.geom(name).id] = (
+                    "door",
+                    f"door_{room.number}",
+                )
+        return objects
 
     def close(self) -> None:
         """Frees the renderer's OpenGL context."""

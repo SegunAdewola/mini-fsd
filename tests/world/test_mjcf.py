@@ -378,3 +378,48 @@ def test_lighting_fields_reach_the_model() -> None:
 def test_rejects_lighting_mujoco_cannot_use(bad: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         mjcf.Appearance(**bad)  # type: ignore[arg-type]
+
+
+def test_every_door_has_a_visible_frame_and_a_hidden_panel() -> None:
+    # D8: a door opening is empty space, so there is nothing to label. The
+    # frame (jambs and head) is what the camera sees, as on a real door;
+    # the panel fills the opening in a geom group the camera never draws,
+    # and only label renders switch it on.
+    model = _compile(PLAN)
+    for room in PLAN.rooms:
+        names = mjcf.door_geoms(room.number)
+        for name in names:
+            g = model.geom(name)
+            assert g.contype[0] == 0 and g.conaffinity[0] == 0  # no physics
+        panel = model.geom(f"door_{room.number}_panel")
+        assert panel.group[0] == mjcf.DOOR_PANEL_GROUP
+        assert panel.group[0] > 2  # MuJoCo draws groups 0 to 2 by default
+        assert all(
+            model.geom(n).group[0] == 0
+            for n in names
+            if not n.endswith("panel")
+        )
+        # The panel spans the opening, floor to the head of the door.
+        lo = panel.pos - panel.size
+        hi = panel.pos + panel.size
+        half = PLAN.door_width / 2
+        assert lo[0] == pytest.approx(room.door_x - half)
+        assert hi[0] == pytest.approx(room.door_x + half)
+        assert (lo[2], hi[2]) == pytest.approx((0.0, mjcf.DOOR_HEIGHT))
+
+
+def test_the_wall_closes_above_each_door() -> None:
+    model = _compile(PLAN)
+    for room in PLAN.rooms:
+        g = model.geom(f"door_{room.number}_lintel")
+        assert g.pos[2] - g.size[2] >= mjcf.DOOR_HEIGHT - 1e-9
+        assert g.pos[2] + g.size[2] == pytest.approx(mjcf.WALL_HEIGHT)
+
+
+def test_glass_is_in_its_own_group_so_labels_can_see_through_it() -> None:
+    model = _with_glass(1.0)
+    fronts = mjcf.hallway_fronts(PLAN)
+    for i in range(len(PLAN.walls)):
+        group = model.geom(f"wall_{i}").group[0]
+        assert group == (mjcf.GLASS_GROUP if i in fronts else 0)
+    assert mjcf.GLASS_GROUP <= 2  # drawn by default, unlike the panels
