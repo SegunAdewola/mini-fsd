@@ -44,6 +44,12 @@ from minifsd.world import floor_plan, mjcf, occupancy, sim
 # (0.2 m) plus room to spare, so the camera is never inside a wall.
 CLEARANCE = 0.35
 SPLITS = ("train", "val", "test")
+# Floor a pose must see along its heading, in metres beyond where its
+# camera's lowest ray meets the floor. Without it, 7 to 10% of frames faced a
+# wall and showed almost no floor (D6); a tall camera held level only sees
+# floor from 2 to 3 m out. The real photos look along open space, too.
+MIN_CLEAR_AHEAD = 1.0
+YAW_TRIES = 30  # headings tried at one spot before moving to another
 # D1 camera poses: robot height up to a handheld phone (design: real test
 # photos at about 0.5 m and 1.5 m), tilted down as a hand holds a phone, and
 # a little roll for an unsteady hand.
@@ -141,17 +147,27 @@ def sample_poses(
     n: int,
     rng: np.random.Generator,
     clutter: Sequence[clutter_lib.Box] = (),
+    cameras: Sequence[sim.CameraSetup] | None = None,
 ) -> list[floor_plan.Pose2D]:
-    """Random poses inside the building, at least CLEARANCE from walls.
+    """Random poses inside the building, looking along open space.
+
+    Each pose is at least CLEARANCE from walls and clutter. Along its
+    heading it has free space out to where its camera sees the floor, plus
+    MIN_CLEAR_AHEAD, so the camera never faces a wall with no floor in view.
 
     Args:
         plan: The floor plan.
         n: How many poses.
         rng: The random source; the same state gives the same poses.
         clutter: Boxes to keep CLEARANCE from, too.
+        cameras: The camera each pose will have, one per pose; None for
+            the robot's own camera throughout.
 
     Returns:
-        n poses at cell centres of the occupancy grid, with any yaw.
+        n poses at cell centres of the occupancy grid.
+
+    Raises:
+        RuntimeError: If the plan has almost no open view anywhere.
     """
     grid = occupancy.from_floor_plan(plan)
     free = ~grid.occupied
@@ -176,13 +192,54 @@ def sample_poses(
         for box in clutter:
             ok &= ~clutter_lib.covers(box, xs, ys, CLEARANCE)
     rows, cols = np.nonzero(ok)
-    picks = rng.choice(len(rows), size=n, replace=len(rows) < n)
-    poses = []
-    for i in picks:
+
+    # Cells the camera can see across: free, inside, and off the clutter.
+    open_ = free & inside
+    if clutter:
+        for box in clutter:
+            # Grown by half a cell's diagonal: the test is at cell centres,
+            # so a box edge between two centres would slip through.
+            open_ &= ~clutter_lib.covers(box, xs, ys, grid.resolution * 0.71)
+    if cameras is None:
+        cameras = [sim.CameraSetup()] * n
+    if len(cameras) != n:
+        raise ValueError(f"need {n} cameras, got {len(cameras)}")
+
+    def clear_ahead(x: float, y: float, yaw: float, reach: float) -> bool:
+        steps = np.arange(0.0, reach, grid.resolution / 2)
+        # world_to_cell is for one point; this is it for the whole ray.
+        px = x + steps * math.cos(yaw)
+        py = y + steps * math.sin(yaw)
+        c = np.floor((px - grid.origin_x) / grid.resolution).astype(int)
+        r = np.floor((py - grid.origin_y) / grid.resolution).astype(int)
+        inside_grid = (
+            (r >= 0) & (r < open_.shape[0]) & (c >= 0) & (c < open_.shape[1])
+        )
+        return bool(inside_grid.all() and open_[r, c].all())
+
+    poses: list[floor_plan.Pose2D] = []
+    spots_left = max(n, 1) * YAW_TRIES  # a bound, never reached in practice
+    while len(poses) < n:
+        spots_left -= 1
+        if spots_left < 0:
+            raise RuntimeError(f"found only {len(poses)} of {n} open poses")
+        cam = cameras[len(poses)]
+        reach = _floor_near_edge(cam) + MIN_CLEAR_AHEAD
+        i = int(rng.integers(len(rows)))
         x, y = grid.cell_centre(int(rows[i]), int(cols[i]))
-        yaw = float(rng.uniform(-math.pi, math.pi))
-        poses.append(floor_plan.Pose2D(x, y, yaw))
+        # A few headings at this spot; if none is open, try another spot.
+        for _ in range(YAW_TRIES):
+            yaw = float(rng.uniform(-math.pi, math.pi))
+            if clear_ahead(x, y, yaw, reach):
+                poses.append(floor_plan.Pose2D(x, y, yaw))
+                break
     return poses
+
+
+def _floor_near_edge(cam: sim.CameraSetup) -> float:
+    """Metres ahead where the bottom edge of the image meets the floor."""
+    lowest_ray = cam.pitch + math.radians(cam.fovy_deg) / 2
+    return cam.height / math.tan(lowest_ray)
 
 
 def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraSetup]:
@@ -456,11 +513,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         boxes = clutter_lib.generate_clutter(
             plan, args.clutter, np.random.default_rng([seed, 2])
         )
-        rng = np.random.default_rng([seed, 1])
-        poses = sample_poses(plan, args.frames_per_plan, rng, boxes)
+        # Cameras first: how much open space a pose needs depends on them.
         cameras = sample_cameras(
             args.frames_per_plan, np.random.default_rng([seed, 3])
         )
+        rng = np.random.default_rng([seed, 1])
+        poses = sample_poses(plan, args.frames_per_plan, rng, boxes, cameras)
         (look,) = sample_appearances(1, np.random.default_rng([seed, 4]))
         fx_rng = np.random.default_rng([seed, 6])
         for frame in render_frames(plan, poses, boxes, cameras, look):

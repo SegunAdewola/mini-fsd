@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 
 from minifsd.data import camera_effects, datagen
 from minifsd.geometry import frames
-from minifsd.world import floor_plan, mjcf, sim
+from minifsd.world import clutter, floor_plan, mjcf, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
 
@@ -345,3 +345,30 @@ def test_meta_records_the_frames_camera_effects(tmp_path: pathlib.Path) -> None:
     meta = json.loads((tmp_path / "meta.jsonl").read_text())["effects"]
     assert meta["motion_px"] == pytest.approx(3.0)
     assert meta["jpeg_quality"] == 60
+
+
+@settings(max_examples=20, deadline=None)
+@given(
+    st.integers(min_value=0, max_value=2**32 - 1),
+    st.integers(min_value=1, max_value=5),
+)
+def test_poses_look_along_open_space(seed: int, n: int) -> None:
+    # D6: in trial batches 7 to 10% of frames showed under 2% floor: a
+    # camera facing a wall, often a tall one held level, whose view meets
+    # the floor only 2 to 3 m ahead. So each pose needs free space along
+    # its heading up to where its camera's lowest ray reaches the floor,
+    # plus MIN_CLEAR_AHEAD of floor beyond that.
+    plan = floor_plan.generate_floor_plan(seed, rooms_per_side=n)
+    rng = np.random.default_rng(seed)
+    boxes = clutter.generate_clutter(plan, 4, rng)
+    cams = datagen.sample_cameras(30, rng)
+    poses = datagen.sample_poses(plan, 30, rng, boxes, cams)
+    slack = 0.05  # one occupancy cell
+    for p, cam in zip(poses, cams, strict=True):
+        lowest_ray = cam.pitch + np.radians(cam.fovy_deg) / 2
+        near_edge = cam.height / np.tan(lowest_ray)
+        reach = near_edge + datagen.MIN_CLEAR_AHEAD
+        for t in np.arange(0.0, reach - slack, 0.02):
+            x, y = p.x + t * np.cos(p.yaw), p.y + t * np.sin(p.yaw)
+            assert _distance_to_walls(plan, x, y) > 0, (p, cam, t)
+            assert not any(clutter.contains(b, x, y) for b in boxes), (p, t)
