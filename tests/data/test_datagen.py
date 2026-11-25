@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from minifsd.data import datagen
-from minifsd.world import floor_plan, mjcf
+from minifsd.world import floor_plan, mjcf, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
 
@@ -146,3 +146,36 @@ def test_read_frames_gives_back_what_was_written(
         np.testing.assert_array_equal(b.floor, f.floor)
         np.testing.assert_allclose(b.depth, f.depth, atol=5e-4)
         assert b.labeled.all()  # every sim pixel is labelled
+
+
+@given(st.integers(min_value=0, max_value=2**32 - 1))
+def test_sampled_cameras_stay_in_range(seed: int) -> None:
+    cams = datagen.sample_cameras(50, np.random.default_rng(seed))
+    assert len(cams) == 50
+    low, high = datagen.CAMERA_HEIGHT_RANGE
+    for c in cams:
+        assert low <= c.height <= high
+        assert 0.0 <= c.pitch <= datagen.MAX_PITCH
+        assert abs(c.roll) <= datagen.MAX_ROLL
+
+
+def test_sampled_cameras_are_reproducible() -> None:
+    a = datagen.sample_cameras(5, np.random.default_rng(3))
+    b = datagen.sample_cameras(5, np.random.default_rng(3))
+    assert a == b
+
+
+@pytest.mark.gl
+def test_meta_records_each_frames_camera(tmp_path: pathlib.Path) -> None:
+    poses = datagen.sample_poses(PLAN, 2, np.random.default_rng(0))
+    cams = [sim.CameraPose(1.4, 0.2, -0.05), sim.CameraPose(0.4, 0.0, 0.03)]
+    frames = list(datagen.render_frames(PLAN, poses, cameras=cams))
+    assert [f.camera for f in frames] == cams
+    for f in frames:
+        datagen.write_frame(f, tmp_path)
+    lines = (tmp_path / "meta.jsonl").read_text().splitlines()
+    for line, cam in zip(lines, cams, strict=True):
+        meta = json.loads(line)
+        assert meta["camera_height"] == pytest.approx(cam.height)
+        assert meta["camera_pitch"] == pytest.approx(cam.pitch)
+        assert meta["camera_roll"] == pytest.approx(cam.roll)

@@ -11,8 +11,9 @@ ranges, so no layout is in two splits and a model can't score well on val by
 remembering a floor it trained on.
 
 Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
-distractors. Camera height, textures and lighting are still fixed; the rest
-of domain randomization is M2.
+distractors, and each frame its own camera pose, from robot height to a
+handheld phone tilted down (D1). Textures and lighting are still fixed; the
+rest of domain randomization follows in M2 (D2 to D5).
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -39,6 +40,12 @@ from minifsd.world import floor_plan, mjcf, occupancy, sim
 # (0.2 m) plus room to spare, so the camera is never inside a wall.
 CLEARANCE = 0.35
 SPLITS = ("train", "val", "test")
+# D1 camera poses: robot height up to a handheld phone (design: real test
+# photos at about 0.5 m and 1.5 m), tilted down as a hand holds a phone, and
+# a little roll for an unsteady hand.
+CAMERA_HEIGHT_RANGE = (0.3, 1.6)
+MAX_PITCH = math.radians(25.0)
+MAX_ROLL = math.radians(5.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -54,6 +61,7 @@ class Frame:
     rgb: np.ndarray  # (H, W, 3) uint8
     depth: np.ndarray  # (H, W) float32, metres along the viewing axis
     floor: np.ndarray  # (H, W) bool
+    camera: sim.CameraPose = sim.CameraPose()
 
 
 def seeds_for(split: str, n: int) -> list[int]:
@@ -126,10 +134,30 @@ def sample_poses(
     return poses
 
 
+def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraPose]:
+    """Random camera poses within the D1 ranges, uniform in each.
+
+    Args:
+        n: How many.
+        rng: The random source; the same state gives the same poses.
+
+    Returns:
+        n camera poses.
+    """
+    heights = rng.uniform(*CAMERA_HEIGHT_RANGE, size=n)
+    pitches = rng.uniform(0.0, MAX_PITCH, size=n)
+    rolls = rng.uniform(-MAX_ROLL, MAX_ROLL, size=n)
+    return [
+        sim.CameraPose(float(h), float(p), float(r))
+        for h, p, r in zip(heights, pitches, rolls, strict=True)
+    ]
+
+
 def render_frames(
     plan: floor_plan.FloorPlan,
     poses: Sequence[floor_plan.Pose2D],
     clutter: Sequence[clutter_lib.Box] = (),
+    cameras: Sequence[sim.CameraPose] | None = None,
 ) -> Iterator[Frame]:
     """Renders one frame per pose.
 
@@ -137,14 +165,19 @@ def render_frames(
         plan: The floor plan.
         poses: Where to put the robot.
         clutter: Boxes standing in the world (distractors).
+        cameras: One camera pose per robot pose; None for the robot's own
+            camera throughout.
 
     Yields:
         The frames, in pose order.
     """
+    if cameras is None:
+        cameras = [sim.CameraPose()] * len(poses)
     s = sim.Sim(plan, clutter=clutter)
     try:
-        for i, pose in enumerate(poses):
+        for i, (pose, cam) in enumerate(zip(poses, cameras, strict=True)):
             s.set_pose(pose)
+            s.set_camera(cam)
             yield Frame(
                 plan_seed=plan.seed,
                 index=i,
@@ -152,6 +185,7 @@ def render_frames(
                 rgb=s.render_rgb(),
                 depth=s.render_depth(),
                 floor=s.render_floor_mask(),
+                camera=cam,
             )
     finally:
         s.close()
@@ -187,7 +221,9 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         "plan_seed": frame.plan_seed,
         "index": frame.index,
         "pose": [frame.pose.x, frame.pose.y, frame.pose.yaw],
-        "camera_height": mjcf.CAMERA_HEIGHT,
+        "camera_height": frame.camera.height,
+        "camera_pitch": frame.camera.pitch,
+        "camera_roll": frame.camera.roll,
         "intrinsics": dataclasses.asdict(k),
     }
     with (out_dir / "meta.jsonl").open("a") as f:
@@ -268,7 +304,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         rng = np.random.default_rng([seed, 1])
         poses = sample_poses(plan, args.frames_per_plan, rng, boxes)
-        for frame in render_frames(plan, poses, boxes):
+        cameras = sample_cameras(
+            args.frames_per_plan, np.random.default_rng([seed, 3])
+        )
+        for frame in render_frames(plan, poses, boxes, cameras):
             write_frame(frame, out)
             total += 1
     print(f"{total} frames from {args.plans} plans in {out}/")

@@ -8,6 +8,7 @@ Time is simulation time, not wall-clock time, so a test that steps 1 s
 always sees the same result however fast the machine is.
 """
 
+import dataclasses
 import math
 from collections.abc import Sequence
 
@@ -22,6 +23,25 @@ from minifsd.world import floor_plan, mjcf
 # actuators' 0.05 s time constant, the robot is stopped within 0.5 s of the
 # last command.
 WATCHDOG_TIMEOUT = 0.3
+
+
+@dataclasses.dataclass(frozen=True)
+class CameraPose:
+    """Where the front camera sits on the robot (D1).
+
+    The default is the robot's own camera: 0.5 m up and level. The data
+    engine varies it, from robot height to a handheld phone.
+
+    Attributes:
+        height: Metres above the floor.
+        pitch: Radians, positive tilts the view down.
+        roll: Radians about the view axis, positive lowers the image's
+            right side.
+    """
+
+    height: float = mjcf.CAMERA_HEIGHT
+    pitch: float = 0.0
+    roll: float = 0.0
 
 
 def body_to_world(v: float, w: float, yaw: float) -> tuple[float, float, float]:
@@ -81,6 +101,10 @@ class Sim:
         self._last_command_time = -math.inf  # no command yet: stay still
         self._renderer: mujoco.Renderer | None = None
         self._floor_geom = self.model.geom("floor").id
+        self._camera = self.model.camera(mjcf.CAMERA).id
+        # The level, forward-facing orientation from the MJCF, which
+        # set_camera tilts from.
+        self._level_quat = self.model.cam_quat[self._camera].copy()
 
     @property
     def time(self) -> float:
@@ -135,6 +159,32 @@ class Sim:
         self.data.qvel[:] = 0.0
         self._v = self._w = 0.0
         mujoco.mj_forward(self.model, self.data)  # update positions, cameras
+
+    def set_camera(self, camera: CameraPose) -> None:
+        """Moves the front camera on the robot, for rendering (D1).
+
+        Changes the compiled model in place, so no rebuild is needed.
+
+        Args:
+            camera: The new camera pose; CameraPose() restores the robot's.
+        """
+        self.model.cam_pos[self._camera] = (0.0, 0.0, camera.height)
+        # MuJoCo's camera frame is x right, y up, looking along -z: the
+        # optical frame with y and z flipped. Pitching the view down is a
+        # turn about x by -pitch in both. Optical z is MuJoCo's -z, so a
+        # roll of +roll about optical z is -roll about MuJoCo's z. Both
+        # are turns about the camera's own axes, so they multiply on the
+        # right: pitch first, then roll about the tilted view axis.
+        pitch = np.zeros(4)
+        roll = np.zeros(4)
+        mujoco.mju_axisAngle2Quat(pitch, np.array([1.0, 0, 0]), -camera.pitch)
+        mujoco.mju_axisAngle2Quat(roll, np.array([0, 0, 1.0]), -camera.roll)
+        tilted = np.zeros(4)
+        mujoco.mju_mulQuat(tilted, self._level_quat, pitch)
+        quat = np.zeros(4)
+        mujoco.mju_mulQuat(quat, tilted, roll)
+        self.model.cam_quat[self._camera] = quat
+        mujoco.mj_forward(self.model, self.data)  # recompute camera poses
 
     def pose(self) -> floor_plan.Pose2D:
         """The robot's true pose in the world frame (ADR 0004)."""

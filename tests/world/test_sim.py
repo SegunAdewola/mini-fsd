@@ -12,7 +12,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from minifsd.geometry import frames
+from minifsd.geometry import camera, frames
 from minifsd.world import floor_plan, mjcf, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
@@ -201,3 +201,84 @@ def test_clutter_blocks_the_robot() -> None:
     s = sim.Sim(PLAN, clutter=(box,))
     _drive(s, 1.0, 0.0, 6.0)
     assert s.pose().x < box.x - box.half_x - mjcf.ROBOT_RADIUS + 0.02
+
+
+def _rot_x(a: float) -> np.ndarray:
+    c, s_ = math.cos(a), math.sin(a)
+    return np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]])
+
+
+def _rot_z(a: float) -> np.ndarray:
+    c, s_ = math.cos(a), math.sin(a)
+    return np.array([[c, -s_, 0], [s_, c, 0], [0, 0, 1]])
+
+
+def _optical_to_world(
+    pose: floor_plan.Pose2D, cam: sim.CameraPose
+) -> np.ndarray:
+    """World-from-optical rotation, built here independently of sim.py.
+
+    A level camera facing +x has optical x (image right) = world -y,
+    optical y (image down) = world -z and optical z (ahead) = world +x.
+    Pitching down turns the view axis toward image-down, a rotation about
+    optical x by -pitch. A positive roll lowers the image's right side, a
+    rotation about optical z by +roll.
+    """
+    level = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], dtype=float)
+    r = _rot_z(pose.yaw) @ level @ _rot_x(-cam.pitch) @ _rot_z(cam.roll)
+    return np.asarray(r, dtype=float)
+
+
+@pytest.mark.gl
+@pytest.mark.parametrize(
+    ("height", "pitch_deg", "roll_deg"),
+    [
+        (0.3, 0.0, 0.0),
+        (0.5, 25.0, 0.0),
+        (1.0, 25.0, -5.0),
+        (1.6, 10.0, 5.0),
+        (1.6, 0.0, 0.0),
+    ],
+)
+def test_floor_pixels_land_on_the_floor_for_any_camera_pose(
+    s: sim.Sim, height: float, pitch_deg: float, roll_deg: float
+) -> None:
+    # D1: the camera can sit anywhere from robot height to a handheld phone,
+    # tilted down and slightly rolled. Every floor pixel, lifted through its
+    # depth and the camera pose, must lie on the floor plane z = 0. A wrong
+    # sign or rotation order puts these points metres off.
+    pose = floor_plan.Pose2D(PLAN.spawn.x, PLAN.spawn.y, 0.3)
+    cam = sim.CameraPose(
+        height, math.radians(pitch_deg), math.radians(roll_deg)
+    )
+    s.set_pose(pose)
+    s.set_camera(cam)
+    mask, depth = s.render_floor_mask(), s.render_depth()
+    k = frames.intrinsics_from_fovy(
+        mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, mjcf.FOVY_DEG
+    )
+    depth = np.where(mask & (depth < 6.0), depth, 0.0)  # floor, not too far
+    points, _ = camera.back_project(depth, k, stride=4)
+    assert len(points) > 100  # it does see floor
+    world = points @ _optical_to_world(pose, cam).T
+    world += (pose.x, pose.y, height)
+    # Depth comes from a float depth buffer; 3 cm allows for it at range.
+    assert np.percentile(np.abs(world[:, 2]), 99) < 0.03
+
+
+@pytest.mark.gl
+def test_the_camera_does_not_see_its_own_robot(s: sim.Sim) -> None:
+    # Tilted down at robot height, the bottom of the view passes over the
+    # robot's top (0.32 m up, 0.2 m radius). The camera should see floor
+    # there, not the body it is mounted on.
+    s.set_camera(sim.CameraPose(0.5, math.radians(25.0), 0.0))
+    assert s.render_floor_mask()[-1].all()
+
+
+@pytest.mark.gl
+def test_the_default_camera_pose_restores_the_robot_camera(s: sim.Sim) -> None:
+    before = s.render_depth()
+    s.set_camera(sim.CameraPose(1.2, 0.3, 0.05))
+    s.set_camera(sim.CameraPose())
+    np.testing.assert_allclose(s.render_depth(), before, atol=1e-4)
+    assert sim.CameraPose().height == mjcf.CAMERA_HEIGHT

@@ -38,6 +38,10 @@ SIGN_GAP = 0.3  # from the door's edge to the sign's centre, along the wall
 
 ROBOT_RADIUS = 0.2
 ROBOT_HALF_HEIGHT = 0.15
+# MuJoCo renders geom groups 0 to 2 by default. The robot's body is in group
+# 3, so its own camera never sees it (D1: a camera tilted down at robot
+# height would). Physics ignores groups, so it still collides.
+ROBOT_GEOM_GROUP = 3
 ROBOT_MASS = 10.0  # kg
 MAX_SPEED = 3.0  # m/s, also the actuator control range
 MAX_TURN = 3.0  # rad/s
@@ -263,6 +267,7 @@ def _add_robot(world: ET.Element) -> None:
         pos=_fmt(0, 0, ROBOT_HALF_HEIGHT + 0.02),  # 2 cm clear of the floor
         mass=_fmt(ROBOT_MASS),
         rgba=_fmt(*ROBOT_RGBA),
+        group=str(ROBOT_GEOM_GROUP),
     )
     # MuJoCo cameras look along their own -z axis, with +y up in the image.
     # xyaxes gives the camera's x and y axes in the body frame: x = -y_body
