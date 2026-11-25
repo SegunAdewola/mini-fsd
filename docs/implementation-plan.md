@@ -226,6 +226,12 @@ real-photo steps are written once D6 is done.
   tiles, speckled carpet) from MuJoCo's built-in procedural textures, no new
   dependency. Test: floor labels are the same under any texture; the same seed
   gives the same pixels and another seed different ones.
+- [x] D3b `[CV]` feat(world): glass room fronts, as in the campus building.
+  About half the plans get glass on a share of the hallway-facing wall segments;
+  end and back walls stay solid. Glass is labelled as the wall it is: no floor
+  behind it, depth to the glass, since the robot can't drive through. Test: with
+  glass, the floor mask and depth match the solid wall while the RGB changes;
+  only hallway fronts turn to glass.
 - [ ] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
   Test: image brightness stays in range, never black or blown out.
 - [ ] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
@@ -466,3 +472,10 @@ Add a row at the end of each session.
   building. The default look keeps the old colours at 1.7 m. Floor masks are
   pixel-identical under every kind, since labels come from geom ids. The side
   walls render almost black; that is lighting, left for D4.
+- **2026-11-25** D3b glass room fronts, added after D3 because the campus
+  building has glass offices and the photo protocol lists glass as a known
+  failure case. Half the plans get glass on 30 to 100% of their hallway-facing
+  segments (`GLASS_RGBA`, alpha 0.25). Decision: glass is labelled as a wall,
+  not as what lies behind it, since the robot can't drive through. MuJoCo gives
+  this for free: a transparent geom still writes the depth buffer and the
+  segmentation, so the labels match a solid wall and only the RGB changes.
