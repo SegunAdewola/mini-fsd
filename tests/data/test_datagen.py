@@ -1,5 +1,6 @@
 """Tests for minifsd.data.datagen: sim frames with exact labels."""
 
+import dataclasses
 import json
 import pathlib
 
@@ -10,6 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from minifsd.data import datagen
+from minifsd.geometry import frames
 from minifsd.world import floor_plan, mjcf, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
@@ -157,6 +159,8 @@ def test_sampled_cameras_stay_in_range(seed: int) -> None:
         assert low <= c.height <= high
         assert 0.0 <= c.pitch <= datagen.MAX_PITCH
         assert abs(c.roll) <= datagen.MAX_ROLL
+        lo, hi = datagen.FOVY_RANGE_DEG
+        assert lo <= c.fovy_deg <= hi
 
 
 def test_sampled_cameras_are_reproducible() -> None:
@@ -168,7 +172,7 @@ def test_sampled_cameras_are_reproducible() -> None:
 @pytest.mark.gl
 def test_meta_records_each_frames_camera(tmp_path: pathlib.Path) -> None:
     poses = datagen.sample_poses(PLAN, 2, np.random.default_rng(0))
-    cams = [sim.CameraPose(1.4, 0.2, -0.05), sim.CameraPose(0.4, 0.0, 0.03)]
+    cams = [sim.CameraSetup(1.4, 0.2, -0.05), sim.CameraSetup(0.4, 0.0, 0.03)]
     frames = list(datagen.render_frames(PLAN, poses, cameras=cams))
     assert [f.camera for f in frames] == cams
     for f in frames:
@@ -179,3 +183,24 @@ def test_meta_records_each_frames_camera(tmp_path: pathlib.Path) -> None:
         assert meta["camera_height"] == pytest.approx(cam.height)
         assert meta["camera_pitch"] == pytest.approx(cam.pitch)
         assert meta["camera_roll"] == pytest.approx(cam.roll)
+
+
+@pytest.mark.gl
+def test_meta_records_each_frames_own_intrinsics(
+    tmp_path: pathlib.Path,
+) -> None:
+    poses = datagen.sample_poses(PLAN, 2, np.random.default_rng(0))
+    cams = [
+        sim.CameraSetup(0.5, 0.0, 0.0, 55.0),
+        sim.CameraSetup(0.5, 0.0, 0.0, 72.0),
+    ]
+    for f in datagen.render_frames(PLAN, poses, cameras=cams):
+        datagen.write_frame(f, tmp_path)
+    lines = (tmp_path / "meta.jsonl").read_text().splitlines()
+    for line, cam in zip(lines, cams, strict=True):
+        k = frames.intrinsics_from_fovy(
+            mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, cam.fovy_deg
+        )
+        assert json.loads(line)["intrinsics"] == pytest.approx(
+            dataclasses.asdict(k)
+        )

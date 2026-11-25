@@ -214,7 +214,7 @@ def _rot_z(a: float) -> np.ndarray:
 
 
 def _optical_to_world(
-    pose: floor_plan.Pose2D, cam: sim.CameraPose
+    pose: floor_plan.Pose2D, cam: sim.CameraSetup
 ) -> np.ndarray:
     """World-from-optical rotation, built here independently of sim.py.
 
@@ -248,7 +248,7 @@ def test_floor_pixels_land_on_the_floor_for_any_camera_pose(
     # depth and the camera pose, must lie on the floor plane z = 0. A wrong
     # sign or rotation order puts these points metres off.
     pose = floor_plan.Pose2D(PLAN.spawn.x, PLAN.spawn.y, 0.3)
-    cam = sim.CameraPose(
+    cam = sim.CameraSetup(
         height, math.radians(pitch_deg), math.radians(roll_deg)
     )
     s.set_pose(pose)
@@ -271,14 +271,44 @@ def test_the_camera_does_not_see_its_own_robot(s: sim.Sim) -> None:
     # Tilted down at robot height, the bottom of the view passes over the
     # robot's top (0.32 m up, 0.2 m radius). The camera should see floor
     # there, not the body it is mounted on.
-    s.set_camera(sim.CameraPose(0.5, math.radians(25.0), 0.0))
+    s.set_camera(sim.CameraSetup(0.5, math.radians(25.0), 0.0))
     assert s.render_floor_mask()[-1].all()
 
 
 @pytest.mark.gl
 def test_the_default_camera_pose_restores_the_robot_camera(s: sim.Sim) -> None:
     before = s.render_depth()
-    s.set_camera(sim.CameraPose(1.2, 0.3, 0.05))
-    s.set_camera(sim.CameraPose())
+    s.set_camera(sim.CameraSetup(1.2, 0.3, 0.05))
+    s.set_camera(sim.CameraSetup())
     np.testing.assert_allclose(s.render_depth(), before, atol=1e-4)
-    assert sim.CameraPose().height == mjcf.CAMERA_HEIGHT
+    assert sim.CameraSetup().height == mjcf.CAMERA_HEIGHT
+
+
+@pytest.mark.gl
+@pytest.mark.parametrize("fovy_deg", [50.0, 62.0, 75.0])
+def test_reported_intrinsics_match_what_a_lens_renders(
+    s: sim.Sim, fovy_deg: float
+) -> None:
+    # D2: the field of view varies, and the intrinsics the sim reports must
+    # be the ones it rendered with. Back-projecting floor pixels through the
+    # reported intrinsics lands them on z = 0; with the wrong fy the rays
+    # spread too much or too little and the floor bends up or down.
+    pose = floor_plan.Pose2D(PLAN.spawn.x, PLAN.spawn.y, 0.0)
+    cam = sim.CameraSetup(1.0, math.radians(15.0), 0.0, fovy_deg)
+    s.set_pose(pose)
+    s.set_camera(cam)
+    k = s.intrinsics()
+    assert k == frames.intrinsics_from_fovy(
+        mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, fovy_deg
+    )
+    mask, depth = s.render_floor_mask(), s.render_depth()
+    depth = np.where(mask & (depth < 6.0), depth, 0.0)
+    points, _ = camera.back_project(depth, k, stride=4)
+    assert len(points) > 100
+    world = points @ _optical_to_world(pose, cam).T
+    world += (pose.x, pose.y, cam.height)
+    assert np.percentile(np.abs(world[:, 2]), 99) < 0.03
+
+
+def test_the_default_setup_is_the_robot_camera() -> None:
+    assert sim.CameraSetup().fovy_deg == mjcf.FOVY_DEG

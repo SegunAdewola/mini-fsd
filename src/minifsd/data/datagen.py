@@ -11,9 +11,10 @@ ranges, so no layout is in two splits and a model can't score well on val by
 remembering a floor it trained on.
 
 Each plan gets clutter (furniture-sized boxes, minifsd.world.clutter) as
-distractors, and each frame its own camera pose, from robot height to a
-handheld phone tilted down (D1). Textures and lighting are still fixed; the
-rest of domain randomization follows in M2 (D2 to D5).
+distractors, and each frame its own camera: from robot height to a handheld
+phone tilted down (D1), with its own field of view (D2). Textures and
+lighting are still fixed; the rest of domain randomization follows in M2 (D3
+to D5).
 
 Output, per split folder:
     plan0000042_0007_rgb.png    RGB
@@ -46,6 +47,10 @@ SPLITS = ("train", "val", "test")
 CAMERA_HEIGHT_RANGE = (0.3, 1.6)
 MAX_PITCH = math.radians(25.0)
 MAX_ROLL = math.radians(5.0)
+# D2 lenses, vertical field of view on our 4:3 image. A phone's main camera
+# is about 55 to 65 degrees in 4:3 landscape; the range goes either side so
+# models don't learn one focal length.
+FOVY_RANGE_DEG = (50.0, 75.0)
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -61,7 +66,7 @@ class Frame:
     rgb: np.ndarray  # (H, W, 3) uint8
     depth: np.ndarray  # (H, W) float32, metres along the viewing axis
     floor: np.ndarray  # (H, W) bool
-    camera: sim.CameraPose = sim.CameraPose()
+    camera: sim.CameraSetup = sim.CameraSetup()
 
 
 def seeds_for(split: str, n: int) -> list[int]:
@@ -134,8 +139,8 @@ def sample_poses(
     return poses
 
 
-def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraPose]:
-    """Random camera poses within the D1 ranges, uniform in each.
+def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraSetup]:
+    """Random camera setups within the D1 and D2 ranges, uniform in each.
 
     Args:
         n: How many.
@@ -147,9 +152,10 @@ def sample_cameras(n: int, rng: np.random.Generator) -> list[sim.CameraPose]:
     heights = rng.uniform(*CAMERA_HEIGHT_RANGE, size=n)
     pitches = rng.uniform(0.0, MAX_PITCH, size=n)
     rolls = rng.uniform(-MAX_ROLL, MAX_ROLL, size=n)
+    fovys = rng.uniform(*FOVY_RANGE_DEG, size=n)  # drawn last: D1 unchanged
     return [
-        sim.CameraPose(float(h), float(p), float(r))
-        for h, p, r in zip(heights, pitches, rolls, strict=True)
+        sim.CameraSetup(float(h), float(p), float(r), float(f))
+        for h, p, r, f in zip(heights, pitches, rolls, fovys, strict=True)
     ]
 
 
@@ -157,7 +163,7 @@ def render_frames(
     plan: floor_plan.FloorPlan,
     poses: Sequence[floor_plan.Pose2D],
     clutter: Sequence[clutter_lib.Box] = (),
-    cameras: Sequence[sim.CameraPose] | None = None,
+    cameras: Sequence[sim.CameraSetup] | None = None,
 ) -> Iterator[Frame]:
     """Renders one frame per pose.
 
@@ -172,7 +178,7 @@ def render_frames(
         The frames, in pose order.
     """
     if cameras is None:
-        cameras = [sim.CameraPose()] * len(poses)
+        cameras = [sim.CameraSetup()] * len(poses)
     s = sim.Sim(plan, clutter=clutter)
     try:
         for i, (pose, cam) in enumerate(zip(poses, cameras, strict=True)):
@@ -214,7 +220,7 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
     cv2.imwrite(str(out_dir / f"{stem}_depth.png"), depth_mm)
 
     k = frames.intrinsics_from_fovy(
-        mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, mjcf.FOVY_DEG
+        mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, frame.camera.fovy_deg
     )
     meta = {
         "stem": stem,

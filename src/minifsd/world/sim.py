@@ -15,6 +15,7 @@ from collections.abc import Sequence
 import mujoco
 import numpy as np
 
+from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf
 
@@ -26,22 +27,25 @@ WATCHDOG_TIMEOUT = 0.3
 
 
 @dataclasses.dataclass(frozen=True)
-class CameraPose:
-    """Where the front camera sits on the robot (D1).
+class CameraSetup:
+    """Where the front camera sits on the robot (D1) and its lens (D2).
 
-    The default is the robot's own camera: 0.5 m up and level. The data
-    engine varies it, from robot height to a handheld phone.
+    The default is the robot's own camera: 0.5 m up, level, 50 degrees
+    vertical field of view. The data engine varies all of it, from robot
+    height to a handheld phone, so models don't learn one camera.
 
     Attributes:
         height: Metres above the floor.
         pitch: Radians, positive tilts the view down.
         roll: Radians about the view axis, positive lowers the image's
             right side.
+        fovy_deg: Vertical field of view in degrees, MuJoCo's convention.
     """
 
     height: float = mjcf.CAMERA_HEIGHT
     pitch: float = 0.0
     roll: float = 0.0
+    fovy_deg: float = mjcf.FOVY_DEG
 
 
 def body_to_world(v: float, w: float, yaw: float) -> tuple[float, float, float]:
@@ -160,13 +164,13 @@ class Sim:
         self._v = self._w = 0.0
         mujoco.mj_forward(self.model, self.data)  # update positions, cameras
 
-    def set_camera(self, camera: CameraPose) -> None:
-        """Moves the front camera on the robot, for rendering (D1).
+    def set_camera(self, camera: CameraSetup) -> None:
+        """Moves the front camera and sets its lens, for rendering (D1, D2).
 
         Changes the compiled model in place, so no rebuild is needed.
 
         Args:
-            camera: The new camera pose; CameraPose() restores the robot's.
+            camera: The new camera pose; CameraSetup() restores the robot's.
         """
         self.model.cam_pos[self._camera] = (0.0, 0.0, camera.height)
         # MuJoCo's camera frame is x right, y up, looking along -z: the
@@ -184,7 +188,16 @@ class Sim:
         quat = np.zeros(4)
         mujoco.mju_mulQuat(quat, tilted, roll)
         self.model.cam_quat[self._camera] = quat
+        self.model.cam_fovy[self._camera] = camera.fovy_deg
         mujoco.mj_forward(self.model, self.data)  # recompute camera poses
+
+    def intrinsics(self) -> frames.Intrinsics:
+        """The pinhole intrinsics the front camera renders with now."""
+        return frames.intrinsics_from_fovy(
+            mjcf.IMAGE_WIDTH,
+            mjcf.IMAGE_HEIGHT,
+            float(self.model.cam_fovy[self._camera]),
+        )
 
     def pose(self) -> floor_plan.Pose2D:
         """The robot's true pose in the world frame (ADR 0004)."""
