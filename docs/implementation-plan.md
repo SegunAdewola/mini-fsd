@@ -248,7 +248,7 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   frames with almost no floor in view (a camera facing a wall from 0.35 m) and
   bias poses toward open views if they are common.
 
-- [ ] D7 `[CV]` feat(world): room numbers on the sign plates. Each sign gets a
+- [x] D7 `[CV]` feat(world): room numbers on the sign plates. Each sign gets a
   texture drawn with OpenCV (`putText`: the room number, a random Hershey font,
   dark on light or light on dark, sometimes a short word such as "Lab" above),
   written into the compiled model's texture memory before the first render. The
@@ -568,3 +568,17 @@ Add a row at the end of each session.
   v8 against 0.231 on v7-clutter. v8 is not harder for it: floors now differ in
   colour from walls and fill more of the frame, so its region growing floods
   walls less. The two numbers are not comparable; v8 is a new benchmark.
+- **2026-11-25** D7 sign text. `minifsd.world.signs` draws each plate with
+  OpenCV (150 x 100 texels, 2 mm each) and `Sim` copies the drawings into the
+  compiled model before the first render. One style per building, as in real
+  ones: plate colour (muted or wild, like the walls), near-neutral text, half
+  dark on light and half light on dark, one of 6 Hershey fonts, and a word above
+  the number in 40% of plans. Plates are redrawn until the text's brightness
+  differs from the plate's by at least 0.4, since HSV value is not brightness as
+  seen (a saturated blue at value 0.8 is dark). Surprise: MuJoCo maps a texture
+  onto a box face in one fixed direction, so signs on the right-hand wall read
+  mirrored; those geoms are turned half round. The test bites: without the turn,
+  a right-hand sign correlates 0.74 with its drawing and 0.91 with the mirror
+  image. `Sim.render_segmentation` (geom id per pixel) was added for that test;
+  D8's boxes will use it. The default look keeps the blue plate and adds white
+  numbers, so the ROS sim's signs are now readable too.
