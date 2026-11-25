@@ -207,8 +207,8 @@ end. Big integration problems show up now, not in December.
 
 Scope: domain randomization (textures, lighting, camera height 0.3 to 1.6 m,
 distractors, blur, noise), sign text, COCO boxes, about 10k frames split by
-seed; about 120 real photos from one building, labeled with SAM 2 help (floor 15
-= val, floors 14 and 2 = test, decided 2026-11-22); Pixel 8a calibration. Domain
+seed; real photos from one building, labeled with SAM 2 help (floor 15 = val,
+floors 14 and 2 = test, decided 2026-11-22); Pixel 8a calibration. Domain
 randomization came first (D1 to D6). Sign text and boxes follow (D7 to D9). The
 real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
 
@@ -257,20 +257,30 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   texture holds its own room number (drawn again in the test and compared); a
   camera facing a sign renders it with contrast; signs stay visual only.
 
-- [ ] D8 `[CV]` feat(data): 2D boxes per frame for obstacles (clutter), room
-  signs and doors, from the renderer, written as one COCO JSON per split. Signs
-  and clutter come from the segmentation image (tight box around each geom's
-  visible pixels, dropped under a minimum area). Door openings are gaps, with no
-  geom to segment, so each door gets a door frame (jambs and head, visible, so
-  real door frames have a match) and its box is the frame's visible extent.
-  Test: a box around a known geom matches its projected corners; boxes lie
-  inside the image; a fully hidden object has no box; the COCO file loads with
-  the classes in a fixed order. Decide before starting: the design's fourth
-  class, "person-like mover", has no source in the sim (see open follow-ups).
+- [x] D8 `[CV]` feat(data): 2D boxes per frame for obstacles (clutter), doors
+  and room signs, from the renderer, written as one COCO JSON per split, with
+  four categories in a fixed order: obstacle, door, room_sign, person (person
+  boxes come from COCO, D10; sim frames have none). Boxes are modal: the tight
+  extent of what is visible, as COCO does it, dropped under a minimum pixel
+  count. Each door gets a visible frame (jambs and head, a match for real door
+  frames) plus a thin panel across the opening in a geom group the camera never
+  draws; a label-only render with the panels on gives the door's visible extent,
+  opening included. Obstacles seen through glass get boxes too, from a label
+  render with the glass hidden. Test: a sign's box matches its projected
+  corners; a door's box spans jamb to jamb; a box behind glass exists; a fully
+  hidden object has none; boxes lie inside the image (property); the COCO file
+  loads with the categories in order.
 
 - [ ] D9 `[CV]` data: generate v9 with signs and boxes, same split sizes and
   seeds as v8. Test: the split check; box counts per class per split recorded
   here; harness sanity run.
+
+- [ ] D10 `[CV]` data: COCO person subset for the detector's person class
+  (decided 2026-11-25, option 3): COCO 2017 images that hold people, with only
+  their person boxes, about 5k train and 500 val. Sim frames supply the other
+  three classes. Training (M3) must treat a class that an image's source doesn't
+  label as unlabeled, not as background. Test: every kept annotation is a
+  person; image ids are unique; the subset is reproducible from a seed.
 
 Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
 
@@ -306,7 +316,8 @@ picked on real val.
 
 Steps written at the end of M3. The chosen model replaces the R10 stub. E4
 HydraNet-lite vs separate models. E5 sim-only vs sim plus DR vs sim plus DR plus
-50 real images.
+50 real images. Includes moving person-sized obstacles in the sim, so the
+navigation loop has to avoid people (decided 2026-11-25).
 
 ## M5 Edge and safety
 
@@ -325,12 +336,6 @@ Not decided yet. Each has the step where it must be settled.
 - **Real photos depend on campus access** (M2). If campus slips past about Dec
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
-
-- **No source for the "person-like mover" class** (D8). The design lists four
-  detection classes; the sim has no people, and the photo protocol frames people
-  out. Options: drop the class and say so; add simple person-shaped proxies to
-  the sim; or take person boxes from a COCO-pretrained detector without training
-  on them.
 
 - **Depth Anything 3 Small gives relative depth only** (V5, M3). Metric scale
   must come from known camera height and the floor plane.
@@ -582,3 +587,24 @@ Add a row at the end of each session.
   image. `Sim.render_segmentation` (geom id per pixel) was added for that test;
   D8's boxes will use it. The default look keeps the blue plate and adds white
   numbers, so the ROS sim's signs are now readable too.
+- **2026-11-25** People stay in (option 3, not dropped): the robot will meet
+  people in the real world. COCO supplies what people look like (D10), since
+  synthetic humans look worse than real photos to a detector. Moving
+  person-sized obstacles go into the sim at M4, so Nav2 has to avoid them. The
+  photo protocol now asks for about 8 photos per floor with people seen from
+  behind, side-on or far off, faces blurred or the photo deleted; the per-floor
+  target rose from 40 to 50.
+- **2026-11-25** D8 boxes. `minifsd.data.boxes` turns a geom-id image into modal
+  boxes (visible extent, at least 40 pixels) and writes COCO with categories
+  obstacle, door, room_sign, person in that order. Doors got frames (jambs and
+  head, 2.1 m, colour per building), the wall closed above them, and a panel
+  across each opening in geom group 4, which the camera never draws. Glass moved
+  to geom group 1. Each frame has two label renders: groups 0 and 2 for
+  obstacles and signs (glass hidden, so a box behind glass is labelled), and the
+  same plus group 4 for doors (panels on, so the opening counts as door). Two
+  renders, because the panels would hide anything seen through an open doorway.
+  Checked that the tests bite: with glass shown in the object pass, the box
+  behind glass loses its label; without group 4, the panel test fails. Cost: 20
+  plans take 59 s against 32 s before, so v9 should take about 25 minutes. A
+  400-frame trial: 557 door, 245 obstacle and 197 sign boxes; 28% of frames have
+  none.
