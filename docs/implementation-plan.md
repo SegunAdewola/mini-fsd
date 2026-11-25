@@ -205,10 +205,36 @@ end. Big integration problems show up now, not in December.
 
 ## M2 Data engine and real data
 
-Steps are written when M1 is done. Scope: domain randomization (textures,
-lighting, camera height 0.3 to 1.6 m, distractors, blur, noise), sign text, COCO
-boxes, about 10k frames split by seed; about 150 real photos labeled with SAM 2
-help (floor 1 = val, rest = test); Pixel 8a calibration.
+Scope: domain randomization (textures, lighting, camera height 0.3 to 1.6 m,
+distractors, blur, noise), sign text, COCO boxes, about 10k frames split by
+seed; about 150 real photos labeled with SAM 2 help (floor 1 = val, rest =
+test); Pixel 8a calibration. The domain randomization steps come first, ordered
+by how much each should help on real photos. Sign text, COCO boxes and the
+real-photo steps are written once D6 is done.
+
+- [x] D1 `[CV]` feat(world): camera height 0.3 to 1.6 m, pitch 0 to 25 degrees
+  down and roll within 5 degrees, sampled per frame by the data engine.
+  `Sim.set_camera` moves the camera without rebuilding the model; the robot's
+  body is hidden from its own camera; meta.jsonl records the camera pose. The
+  ROS sim keeps its fixed level camera at 0.5 m. Test: rendered floor pixels
+  back-project to the floor plane (z = 0) for several heights, pitches and
+  rolls, using camera math written independently in the test.
+- [ ] D2 `[CV]` feat(world): vertical field of view 50 to 75 degrees per plan,
+  with intrinsics recorded per frame. Test: the recorded intrinsics match the
+  rendered geometry.
+- [ ] D3 `[CV]` feat(world): floor, wall and ceiling appearance per plan (flat,
+  tiles, speckled carpet) from MuJoCo's built-in procedural textures, no new
+  dependency. Test: floor labels are the same under any texture; the same seed
+  gives the same pixels and another seed different ones.
+- [ ] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
+  Test: image brightness stays in range, never black or blown out.
+- [ ] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
+  exposure and gamma, JPEG artefacts) in a pure OpenCV module. Test: shape and
+  dtype kept, labels untouched, same rng gives the same output (properties).
+- [ ] D6 `[CV]` data: generate v8, about 10k frames split by seed; record time
+  and disk size; harness sanity run. Test: the split check from V7. Also count
+  frames with almost no floor in view (a camera facing a wall from 0.35 m) and
+  bias poses toward open views if they are common.
 
 ## M3 Model comparison E1 to E3
 
@@ -277,8 +303,10 @@ Not decided yet. Each has the step where it must be settled.
   A twin of a campus floor needs walls with an angle; R2 and R7 change by a few
   lines when that happens.
 
-- **Floor-plan scale** (M2). Assumed elevator door 1.1 m; confirm one real
-  measurement on campus and rescale if needed.
+- **Floor-plan scale** (M2). Done 2026-11-24: an elevator door measured 1.07 m
+  against the 1.1 m assumed (3% off), and the lobby between the elevator rows
+  2.24 m. Both sit inside the generator's ranges (doors 0.9 to 1.2 m, hallways
+  1.8 to 3.0 m). The pixel scale is kept with the plans in `private/`.
 
 - **Render tests on a Linux runner** (M2). GitHub's macOS runners have no GPU,
   so CI deselects the `gl` tests. Add a `linux-64` platform and run them there
@@ -411,3 +439,15 @@ Add a row at the end of each session.
   NYUv2 train and sim frames the overlays show the baseline's failures plainly:
   it fills a chair seat or tabletop when the seed lands on one, and in the sim
   it floods the walls, which are a flat grey close to the floor's.
+- **2026-11-24** CI went red twice after V6. The cause was not Actions minutes
+  (free for public repos, macOS included) but the harness latency test: it
+  allowed 15 ms of jitter over a 20 ms sleep, and a shared CI Mac took 51 ms.
+  The upper bound now only has to tell one image from the whole run.
+- **2026-11-24** D1 camera poses.
+  `Sim.set_camera(CameraPose(height, pitch, roll))` edits the compiled model's
+  camera in place. MuJoCo's camera frame is the optical frame with y and z
+  flipped, so pitch keeps its sign about x and roll flips about z; a test built
+  from independent camera math checks that floor pixels land on z = 0 within 3
+  cm for five poses. A camera tilted down at robot height saw the robot's own
+  top, so the robot body moved to geom group 3, which cameras don't render;
+  collisions are unchanged.
