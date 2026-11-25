@@ -207,10 +207,10 @@ end. Big integration problems show up now, not in December.
 
 Scope: domain randomization (textures, lighting, camera height 0.3 to 1.6 m,
 distractors, blur, noise), sign text, COCO boxes, about 10k frames split by
-seed; about 150 real photos labeled with SAM 2 help (floor 1 = val, rest =
-test); Pixel 8a calibration. The domain randomization steps come first, ordered
-by how much each should help on real photos. Sign text, COCO boxes and the
-real-photo steps are written once D6 is done.
+seed; about 120 real photos from one building, labeled with SAM 2 help (floor 15
+= val, floors 14 and 2 = test, decided 2026-11-22); Pixel 8a calibration. Domain
+randomization came first (D1 to D6). Sign text and boxes follow (D7 to D9). The
+real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
 
 - [x] D1 `[CV]` feat(world): camera height 0.3 to 1.6 m, pitch 0 to 25 degrees
   down and roll within 5 degrees, sampled per frame by the data engine.
@@ -219,28 +219,81 @@ real-photo steps are written once D6 is done.
   ROS sim keeps its fixed level camera at 0.5 m. Test: rendered floor pixels
   back-project to the floor plane (z = 0) for several heights, pitches and
   rolls, using camera math written independently in the test.
+
 - [x] D2 `[CV]` feat(world): vertical field of view 50 to 75 degrees per frame,
   with intrinsics recorded per frame. Test: the recorded intrinsics match the
   rendered geometry.
+
 - [x] D3 `[CV]` feat(world): floor, wall and ceiling appearance per plan (flat,
   tiles, speckled carpet) from MuJoCo's built-in procedural textures, no new
   dependency. Test: floor labels are the same under any texture; the same seed
   gives the same pixels and another seed different ones.
+
 - [x] D3b `[CV]` feat(world): glass room fronts, as in the campus building.
   About half the plans get glass on a share of the hallway-facing wall segments;
   end and back walls stay solid. Glass is labelled as the wall it is: no floor
   behind it, depth to the glass, since the robot can't drive through. Test: with
   glass, the floor mask and depth match the solid wall while the RGB changes;
   only hallway fronts turn to glass.
+
 - [x] D4 `[CV]` feat(world): lighting per plan (intensity, direction, ambient).
   Test: image brightness stays in range, never black or blown out.
+
 - [x] D5 `[CV]` feat(data): camera effects after rendering (blur, sensor noise,
   exposure and gamma, JPEG artefacts) in a pure OpenCV module. Test: shape and
   dtype kept, labels untouched, same rng gives the same output (properties).
+
 - [x] D6 `[CV]` data: generate v8, about 10k frames split by seed; record time
   and disk size; harness sanity run. Test: the split check from V7. Also count
   frames with almost no floor in view (a camera facing a wall from 0.35 m) and
   bias poses toward open views if they are common.
+
+- [ ] D7 `[CV]` feat(world): room numbers on the sign plates. Each sign gets a
+  texture drawn with OpenCV (`putText`: the room number, a random Hershey font,
+  dark on light or light on dark, sometimes a short word such as "Lab" above),
+  written into the compiled model's texture memory before the first render. The
+  sign reader (M5) runs off-the-shelf OCR on sign crops, so the sim needs
+  readable numbers for it to be tested on. No new dependency. Test: each sign's
+  texture holds its own room number (drawn again in the test and compared); a
+  camera facing a sign renders it with contrast; signs stay visual only.
+
+- [ ] D8 `[CV]` feat(data): 2D boxes per frame for obstacles (clutter), room
+  signs and doors, from the renderer, written as one COCO JSON per split. Signs
+  and clutter come from the segmentation image (tight box around each geom's
+  visible pixels, dropped under a minimum area). Door openings are gaps, with no
+  geom to segment, so each door gets a door frame (jambs and head, visible, so
+  real door frames have a match) and its box is the frame's visible extent.
+  Test: a box around a known geom matches its projected corners; boxes lie
+  inside the image; a fully hidden object has no box; the COCO file loads with
+  the classes in a fixed order. Decide before starting: the design's fourth
+  class, "person-like mover", has no source in the sim (see open follow-ups).
+
+- [ ] D9 `[CV]` data: generate v9 with signs and boxes, same split sizes and
+  seeds as v8. Test: the split check; box counts per class per split recorded
+  here; harness sanity run.
+
+Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
+
+- [ ] P1 `[CV]` feat(data): `minifsd.data.real` import check: count per floor
+  and height block (from the card photos), resolution, EXIF focal length
+  present, card photos removed. Test: on a small fixture folder of generated
+  JPEGs with and without EXIF.
+- [ ] P2 `[CV]` data: Pixel 8a calibration with V4's code on the checkerboard
+  photos (same lens and settings as the protocol). Record fx, fy, cx, cy,
+  distortion and the reprojection error here. Test: reprojection error under 1
+  px; the intrinsics agree with the EXIF focal length within 5%.
+- [ ] P3 `[CV]` feat(data): floor masks with SAM 2 help: click points on the
+  floor, SAM 2 proposes the mask, fix by hand where needed. Floor 15 first,
+  since model choice needs val. New dependency (ask first; it could live in the
+  `cv` environment). Test: masks are binary, the photo's size, and saved next to
+  it; a mask round-trips through the loader.
+- [ ] P4 `[CV]` feat(data): boxes for doors, signs and obstacles on the real
+  photos, in the same COCO format as D8. Tool to be chosen at P4 (hand-drawn
+  boxes in a small OpenCV script, or SAM 2 box prompts).
+- [ ] P5 `[CV]` data: freeze the real split. A manifest with each photo's
+  SHA-256, floor and height; floors 14 and 2 are test, used once for the final
+  numbers. Test: the loader refuses a test photo whose hash is not in the
+  manifest.
 
 ## M3 Model comparison E1 to E3
 
@@ -272,6 +325,12 @@ Not decided yet. Each has the step where it must be settled.
 - **Real photos depend on campus access** (M2). If campus slips past about Dec
   1, shoot the real set in another indoor building and lean on NYUv2 for the
   public benchmark. Say so in the report.
+
+- **No source for the "person-like mover" class** (D8). The design lists four
+  detection classes; the sim has no people, and the photo protocol frames people
+  out. Options: drop the class and say so; add simple person-shaped proxies to
+  the sim; or take person boxes from a COCO-pretrained detector without training
+  on them.
 
 - **Depth Anything 3 Small gives relative depth only** (V5, M3). Metric scale
   must come from known camera height and the floor plane.
