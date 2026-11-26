@@ -218,13 +218,13 @@ def test_coco_folders_keep_crowd_regions(tmp_path: pathlib.Path) -> None:
 def test_the_segformer_candidate_loads_a_checkpoint_and_masks_floor(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # E2a: a run's best/ folder, copied to SEGFORMER_DIR, scored as "floor".
+    # E2a: a run's best/ folder, copied to MODELS/<name>, scored as "floor".
     pytest.importorskip("torch")
     pytest.importorskip("transformers")
     from minifsd.train import segformer
 
-    segformer.build_model(None).save_pretrained(tmp_path / "b0")
-    monkeypatch.setattr(harness, "SEGFORMER_DIR", tmp_path / "b0")
+    segformer.build_model(None).save_pretrained(tmp_path / "floor-segformer-b0")
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
     c = harness.make_candidate("floor-segformer-b0", device="cpu", threads=1)
     assert (c.name, c.task) == ("floor-segformer-b0", "floor")
     mask = c.predict(np.zeros((240, 320, 3), np.uint8))
@@ -278,13 +278,13 @@ def test_nyuv2_train_and_test_are_the_official_splits() -> None:
 def test_the_dino_candidate_loads_a_checkpoint_and_masks_floor(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # E2b: a run's best/ folder, copied to DINO_DIR, scored as "floor".
+    # E2b: a run's best/ folder, copied to MODELS/<name>, scored as "floor".
     pytest.importorskip("torch")
     pytest.importorskip("transformers")
     from minifsd.train import dino
 
-    dino.build_model(None).save(tmp_path / "dino")
-    monkeypatch.setattr(harness, "DINO_DIR", tmp_path / "dino")
+    dino.build_model(None).save(tmp_path / "floor-dinov2-s")
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
     c = harness.make_candidate("floor-dinov2-s", device="cpu", threads=1)
     assert (c.name, c.task) == ("floor-dinov2-s", "floor")
     mask = c.predict(np.zeros((240, 320, 3), np.uint8))
@@ -311,3 +311,52 @@ def test_the_yolo_candidate_runs_the_exported_model_under_the_cap(
     assert (c.name, c.task) == ("detect-yolo26n", "detect")
     assert opened == [(harness.YOLO_ONNX, 2)]
     assert c.predict(np.zeros((240, 320, 3), np.uint8)) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [("floor-dinov2-s-v10", "dino"), ("floor-segformer-b0-v10", "segformer")],
+)
+def test_v10_retrains_load_from_their_own_folders(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    kind: str,
+) -> None:
+    # E2c: each model loads from MODELS/<its name>, so v9 and v10 runs of
+    # one architecture are scored side by side.
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.train import dino, segformer
+
+    if kind == "dino":
+        dino.build_model(None).save(tmp_path / name)
+    else:
+        segformer.build_model(None).save_pretrained(tmp_path / name)
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
+    c = harness.make_candidate(name, device="cpu", threads=1)
+    assert (c.name, c.task) == (name, "floor")
+    assert c.predict(np.zeros((240, 320, 3), np.uint8)).shape == (240, 320)
+
+
+def test_the_rf_detr_candidate_decodes_as_detr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # E1b: same runtime and thread cap as YOLO, its own output layout.
+    from minifsd.perception import detect_onnx
+
+    opened: list[tuple[pathlib.Path, int, str]] = []
+
+    class Fake:
+        def __init__(
+            self, path: pathlib.Path, threads: int, kind: str = "end2end"
+        ) -> None:
+            opened.append((path, threads, kind))
+
+        def predict(self, rgb: np.ndarray) -> list[object]:
+            return []
+
+    monkeypatch.setattr(detect_onnx, "OnnxDetector", Fake)
+    c = harness.make_candidate("detect-rfdetr-nano", device="cpu", threads=2)
+    assert (c.name, c.task) == ("detect-rfdetr-nano", "detect")
+    assert opened == [(harness.RFDETR_ONNX, 2, "detr")]

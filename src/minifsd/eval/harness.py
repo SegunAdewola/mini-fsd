@@ -21,6 +21,7 @@ process (one command per run) for clean numbers.
 import argparse
 import dataclasses
 import datetime
+import functools
 import json
 import os
 import pathlib
@@ -53,12 +54,15 @@ FIT_IMAGES = 100  # train images for depth's global scale and shift (V5)
 # NYUv2 train images held out for picking models (E2, E3): NYUv2 test stays
 # clean for the final numbers. Never trained on, and never in the fit sample.
 VAL_IMAGES = 200
-# E2a's best checkpoint, copied from the run's best/ folder on Drive.
-SEGFORMER_DIR = pathlib.Path("data/models/floor-segformer-b0")
-# E2b's best checkpoint (backbone and head), from the run's best/ folder.
-DINO_DIR = pathlib.Path("data/models/floor-dinov2-s")
+# Trained floor models: each in MODELS/<candidate name>, copied from a run's
+# best/ folder on Drive, so a v9 model and its v10 retrain sit side by side.
+MODELS = pathlib.Path("data/models")
 # E1a's ONNX export (ADR 0008), copied from the run's weights/ on Drive.
 YOLO_ONNX = pathlib.Path("data/models/detect-yolo26n/best.onnx")
+# E1b's ONNX export, copied from the run folder on Drive.
+RFDETR_ONNX = pathlib.Path(
+    "data/models/detect-rfdetr-nano/inference_model.onnx"
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -317,29 +321,31 @@ def _depth_anything(
 
 
 def _floor_segformer(
-    device: str, threads: int, input_size: int | None
+    device: str, threads: int, input_size: int | None, name: str
 ) -> Candidate:
     import torch
 
     from minifsd.perception import floor_segformer
 
     if input_size is not None:
-        raise ValueError("floor-segformer-b0 runs at 320 x 240; no input_size")
+        raise ValueError(f"{name} runs at 320 x 240; no input_size")
     torch.set_num_threads(threads)
-    model = floor_segformer.FloorSegformer(SEGFORMER_DIR, device=device)
-    return Candidate("floor-segformer-b0", "floor", model.predict)
+    model = floor_segformer.FloorSegformer(MODELS / name, device=device)
+    return Candidate(name, "floor", model.predict)
 
 
-def _floor_dino(device: str, threads: int, input_size: int | None) -> Candidate:
+def _floor_dino(
+    device: str, threads: int, input_size: int | None, name: str
+) -> Candidate:
     import torch
 
     from minifsd.perception import floor_dino
 
     if input_size is not None:
-        raise ValueError("floor-dinov2-s runs at 322 x 238; no input_size")
+        raise ValueError(f"{name} runs at 322 x 238; no input_size")
     torch.set_num_threads(threads)
-    model = floor_dino.FloorDino(DINO_DIR, device=device)
-    return Candidate("floor-dinov2-s", "floor", model.predict)
+    model = floor_dino.FloorDino(MODELS / name, device=device)
+    return Candidate(name, "floor", model.predict)
 
 
 def _detect_yolo(
@@ -353,6 +359,19 @@ def _detect_yolo(
     return Candidate("detect-yolo26n", "detect", model.predict)
 
 
+def _detect_rfdetr(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
+    from minifsd.perception import detect_onnx
+
+    if device != "cpu" or input_size is not None:
+        raise ValueError(
+            "detect-rfdetr-nano runs on the CPU at its export size"
+        )
+    model = detect_onnx.OnnxDetector(RFDETR_ONNX, threads, kind="detr")
+    return Candidate("detect-rfdetr-nano", "detect", model.predict)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -360,9 +379,17 @@ def _detect_yolo(
 CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "floor-classical": _floor_classical,
     "depth-anything-v2-small": _depth_anything,
-    "floor-segformer-b0": _floor_segformer,
-    "floor-dinov2-s": _floor_dino,
+    # E2a and E2b on v9, and E2c's retrains on v10 (D12).
+    **{
+        name: functools.partial(_floor_segformer, name=name)
+        for name in ("floor-segformer-b0", "floor-segformer-b0-v10")
+    },
+    **{
+        name: functools.partial(_floor_dino, name=name)
+        for name in ("floor-dinov2-s", "floor-dinov2-s-v10")
+    },
     "detect-yolo26n": _detect_yolo,
+    "detect-rfdetr-nano": _detect_rfdetr,
 }
 
 

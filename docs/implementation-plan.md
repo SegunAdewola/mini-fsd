@@ -388,7 +388,13 @@ rule holds: 2 candidates per experiment.
   module's dataset and resume logic (ultralytics itself is not run locally); the
   harness candidate turns ONNX output into `detection.Detection` boxes in image
   pixels.
-- [ ] E1b `[CV]` exp: RF-DETR Nano, same data and scoring.
+- [ ] E1b `[CV]` exp: RF-DETR Nano (rfdetr 1.12.1, Apache-2.0, Colab only like
+  ultralytics), same data, same 320 px input and same scoring as E1a. Exported
+  to ONNX and scored through the same `detect_onnx` runtime, with RF-DETR's own
+  input (stretched, ImageNet-normalised) and output (normalised boxes, per-class
+  sigmoid logits) read from rfdetr 1.12.1's export code. Test: the training
+  module's dataset, resume and export flow (fake `rfdetr`); decoding maps boxes
+  to photo pixels and keeps two classes for one query.
 - [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot through the harness, on
   NYUv2 test and v9 val, next to V5's Depth Anything V2 Small numbers, with the
   same per-image and global scale fits.
@@ -824,3 +830,16 @@ Add a row at the end of each session.
   and maps end-to-end rows (x1, y1, x2, y2, score, class) back to photo pixels;
   the harness candidate is `detect-yolo26n`. The (1, N, 6) output shape is
   YOLO26's documented end-to-end export; the first real export confirms it.
+- **2026-11-25** E2c, DINOv2 half: retrained on v10, nyuv2-val IoU 0.516 (v9
+  model 0.467), precision 0.747 (0.715), recall 0.625 (0.573); v9 val and v10
+  val unchanged (0.956, 0.952). Furniture in the sim helped on real rooms in
+  both directions. Harness candidates now load from `data/models/<name>`, so v9
+  and v10 runs sit side by side. Latency for this same architecture read 76 to
+  91 ms earlier in the day and 111 to 133 ms now: the fanless M1 Air slows as it
+  heats, so the report's latencies are to be measured in one session, cool, with
+  nothing else running.
+- **2026-11-25** E1b code: `minifsd.train.rf_detr` (fake `rfdetr` in tests) and
+  RF-DETR decoding in `detect_onnx`; harness candidate `detect-rfdetr-nano`. The
+  input and output layout and the class numbering come from reading rfdetr
+  1.12.1's source (downloaded, not installed); the first real export confirms
+  them.

@@ -111,3 +111,51 @@ def test_the_exported_model_returns_detections_in_photo_pixels() -> None:
     for d in found:
         assert d.category in boxes.CATEGORIES
         assert 0 <= d.x <= 640 and 0 <= d.y <= 480
+
+
+# RF-DETR (E1b): stretched to a square, ImageNet-normalised; outputs
+# normalised cxcywh boxes and per-class logits.
+
+
+def test_stretch_resizes_to_the_square_and_normalises() -> None:
+    x = detect_onnx.stretch(np.full((240, 320, 3), 255, np.uint8), SIZE)
+    assert x.shape == (1, 3, SIZE, SIZE) and x.dtype == np.float32
+    expected = (1.0 - np.array(detect_onnx.IMAGENET_MEAN)) / np.array(
+        detect_onnx.IMAGENET_STD
+    )
+    assert x[0, :, 5, 5] == pytest.approx(expected, rel=1e-5)
+
+
+def _logit(p: float) -> float:
+    return float(np.log(p / (1 - p)))
+
+
+def test_detr_outputs_map_to_photo_pixels_and_categories() -> None:
+    q = 3
+    dets = np.zeros((q, 4), np.float32)
+    logits = np.full((q, len(boxes.CATEGORIES)), -10.0, np.float32)
+    dets[0] = [0.5, 0.5, 0.2, 0.4]  # centred box, 20% wide, 40% tall
+    logits[0, boxes.CATEGORIES.index("door")] = _logit(0.9)
+    (d,) = detect_onnx.decode_detr(dets, logits, 640, 480, min_score=0.5)
+    assert d.category == "door" and d.score == pytest.approx(0.9, abs=1e-5)
+    assert (d.x, d.y, d.w, d.h) == pytest.approx((256, 144, 128, 192))
+
+
+def test_one_query_can_be_two_classes_as_rf_detr_scores_them() -> None:
+    # Per-class sigmoids, not a softmax: a query may score high on two.
+    dets = np.array([[0.5, 0.5, 0.2, 0.2]], np.float32)
+    logits = np.full((1, len(boxes.CATEGORIES)), -10.0, np.float32)
+    logits[0, 0] = _logit(0.8)
+    logits[0, 3] = _logit(0.6)
+    found = detect_onnx.decode_detr(dets, logits, 100, 100, min_score=0.5)
+    assert [(d.category, round(d.score, 3)) for d in found] == [
+        ("obstacle", 0.8),
+        ("person", 0.6),
+    ]
+
+
+def test_a_class_slot_beyond_our_categories_is_ignored() -> None:
+    dets = np.array([[0.5, 0.5, 0.2, 0.2]], np.float32)
+    logits = np.full((1, len(boxes.CATEGORIES) + 1), -10.0, np.float32)
+    logits[0, -1] = _logit(0.99)  # an extra slot some exports carry
+    assert detect_onnx.decode_detr(dets, logits, 100, 100, 0.5) == []
