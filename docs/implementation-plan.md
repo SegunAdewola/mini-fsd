@@ -407,12 +407,19 @@ rule holds: 2 candidates per experiment.
   says why). Test: the key follows the pixels; export is lossless and skips
   repeats; predictions come back as 1/depth by key; an untimed candidate logs
   NaN latency, which the report shows as "—" and keeps off the front.
-- [ ] E3b `[CV]` exp: a small distilled depth network: a light encoder and
-  decoder trained on v9's exact depth plus Depth Anything V2's outputs on NYUv2
-  train (scale and shift fitted per image), with metric scale from the floor
-  plane at run time. Target: under 50 ms on the M1 with AbsRel close to the
-  teacher's. Test: the harness candidate returns depth in metres; the floor
-  plane scale recovers a known camera height on sim frames within 5%.
+- [ ] E3b `[CV]` exp: a small distilled depth network. Changed 2026-11-26: the
+  student is SegFormer-B0 with one output channel (relative disparity) at 160 x
+  120, a quarter of E2a's pixels, aiming at the 50 ms budget; no new dependency
+  (transformers has the MiT-b0 encoder; torchvision isn't installed). It learns
+  from v10's exact depth (as 1 / depth) and from Depth Anything V2-Small's
+  disparity (the E3a pick, as teacher) on the 495 NYUv2 train images left after
+  removing nyuv2-val and nyuv2-fit; no human depth labels on real images. The
+  teacher set is repeated to half of each epoch. Loss: MiDaS's scale-and-shift
+  invariant loss (least-squares align, then mean absolute error). Metric scale
+  from the floor plane at run time is left as future work. Test: the loss is 0
+  for any scale and shift of the target (property) and ignores invalid pixels;
+  the teacher set never takes a nyuv2-val or nyuv2-fit image; training writes a
+  checkpoint and resumes; the harness candidate returns (H, W) disparity.
 - [x] T4 `[CV]` feat(eval): results table and accuracy against latency plot
   (Pareto front) from results.jsonl, one per experiment, for the report. Test: a
   fixture log gives the expected table rows and front.

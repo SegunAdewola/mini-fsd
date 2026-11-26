@@ -436,3 +436,29 @@ def test_task_candidates_skip_the_heads_they_dont_need(
     harness.make_candidate("hydra-floor", device="cpu", threads=1).predict(rgb)
     harness.make_candidate("hydra-all", device="cpu", threads=1).predict(rgb)
     assert used == [("floor",), ("floor", "depth", "detect")]
+
+
+def test_the_teacher_set_is_train_without_val_or_fit() -> None:
+    # E3b learns from these with the teacher's labels; nyuv2-val picks the
+    # model and nyuv2-fit sets depth scale, so neither may be in it.
+    teach = harness.nyuv2_indices("nyuv2-teach", NYU_SPLITS)
+    val = harness.nyuv2_indices("nyuv2-val", NYU_SPLITS)
+    fit = harness.nyuv2_indices("nyuv2-fit", NYU_SPLITS)
+    assert set(teach) == set(NYU_SPLITS["train"]) - set(val) - set(fit)
+    assert len(teach) == 795 - harness.VAL_IMAGES - harness.FIT_IMAGES
+    assert teach == sorted(teach)
+
+
+def test_the_depth_student_candidate_loads_its_folder(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # E3b: SegFormer-B0 at 160 x 120 predicting disparity, timed on the M1.
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.train import depth_student
+
+    depth_student.build_model(None).save_pretrained(tmp_path / "depth-student")
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
+    c = harness.make_candidate("depth-student", device="cpu", threads=1)
+    assert (c.name, c.task, c.timed) == ("depth-student", "depth", True)
+    assert c.predict(np.zeros((240, 320, 3), np.uint8)).shape == (240, 320)

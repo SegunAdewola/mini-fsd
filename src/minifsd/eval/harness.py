@@ -417,6 +417,20 @@ def _hydra(
     return Candidate(name, task, predict)
 
 
+def _depth_student(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
+    import torch
+
+    from minifsd.perception import depth_student
+
+    if input_size is not None:
+        raise ValueError("depth-student runs at 160 x 120; no input_size")
+    torch.set_num_threads(threads)
+    model = depth_student.DepthStudent(MODELS / "depth-student", device=device)
+    return Candidate("depth-student", "depth", model.predict)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -436,6 +450,7 @@ CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "detect-yolo26n": _detect_yolo,
     "detect-rfdetr-nano": _detect_rfdetr,
     "depth-da3-small": _depth_da3,
+    "depth-student": _depth_student,  # E3b
     # E4: one HydraNet scored per task, and hydra-all, which runs every
     # head (returning the floor mask) so its latency is the shared cost.
     "hydra-floor": functools.partial(
@@ -486,8 +501,9 @@ def nyuv2_indices(name: str, splits: dict[str, list[int]]) -> list[int]:
         name: "nyuv2-train" or "nyuv2-test", the official splits;
             "nyuv2-fit", the fixed sample of FIT_IMAGES train images for
             depth's global scale and shift (V5); or "nyuv2-val", VAL_IMAGES
-            other train images for picking models. A model trained on
-            NYUv2 train (E3b) must leave nyuv2-val out.
+            other train images for picking models; or "nyuv2-teach", the
+            train images in neither, which E3b learns from with the
+            teacher's labels.
         splits: From nyuv2.load_split.
 
     Raises:
@@ -495,7 +511,7 @@ def nyuv2_indices(name: str, splits: dict[str, list[int]]) -> list[int]:
     """
     if name in ("nyuv2-train", "nyuv2-test"):
         return list(splits[name.removeprefix("nyuv2-")])
-    if name not in ("nyuv2-fit", "nyuv2-val"):
+    if name not in ("nyuv2-fit", "nyuv2-val", "nyuv2-teach"):
         raise ValueError(f"unknown dataset {name!r}")
     rng = np.random.default_rng(0)  # the same fit sample as V5
     fit = sorted(
@@ -505,7 +521,10 @@ def nyuv2_indices(name: str, splits: dict[str, list[int]]) -> list[int]:
         return fit
     rest = sorted(set(splits["train"]) - set(fit))
     rng = np.random.default_rng(1)
-    return sorted(int(i) for i in rng.choice(rest, VAL_IMAGES, replace=False))
+    val = sorted(int(i) for i in rng.choice(rest, VAL_IMAGES, replace=False))
+    if name == "nyuv2-val":
+        return val
+    return sorted(set(rest) - set(val))  # nyuv2-teach
 
 
 def load_dataset(name: str, limit: int | None = None) -> Iterator[Any]:
