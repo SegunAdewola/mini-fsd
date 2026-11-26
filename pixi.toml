@@ -97,6 +97,9 @@ typecheck = "mypy"
 [feature.cv.dependencies]
 pytorch = "2.14.*"
 transformers = "*"   # Depth Anything V2 and other Hugging Face models
+# SAM 2.1's image processor in transformers needs it (the P3 labelling tool).
+# conda-forge builds it against the pytorch above.
+torchvision = "0.29.*"   # the release that pairs with torch 2.14
 onnxruntime = "1.32.*"   # exported detectors (E1, ADR 0008), and E6 / the demo
 # torch.onnx's exporter needs both: onnx for the model format, onnxscript for
 # torch 2.x's default (dynamo) exporter. Export only (M4.4); nothing at run
