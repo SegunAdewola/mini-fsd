@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
 from minifsd.demo import overlay
+from minifsd.eval import detection
 
 SHAPES = st.tuples(st.integers(1, 24), st.integers(1, 24))
 
@@ -51,3 +52,26 @@ def test_keeps_shape_and_dtype_and_leaves_the_input_alone() -> None:
 def test_rejects_a_mask_of_another_size() -> None:
     with pytest.raises(ValueError):
         overlay.draw_floor(np.zeros((4, 6, 3), np.uint8), np.ones((4, 5), bool))
+
+
+def test_a_box_is_outlined_and_its_inside_left_alone() -> None:
+    rgb = np.zeros((60, 80, 3), np.uint8)
+    box = detection.Detection("person", 20.0, 10.0, 30.0, 40.0, 0.9)
+    out = overlay.draw_boxes(rgb, [box])
+    assert out.shape == rgb.shape and out.dtype == np.uint8
+    assert out[30, 20].any()  # on the left edge
+    assert not out[30, 35].any()  # well inside, away from the label
+    assert not rgb.any()  # the input is untouched
+
+
+def test_each_class_has_its_own_colour() -> None:
+    rgb = np.zeros((60, 80, 3), np.uint8)
+    colours = {
+        tuple(
+            overlay.draw_boxes(
+                rgb, [detection.Detection(c, 20.0, 10.0, 30.0, 40.0, 0.9)]
+            )[30, 20]
+        )
+        for c in overlay.BOX_RGB
+    }
+    assert len(colours) == len(overlay.BOX_RGB)
