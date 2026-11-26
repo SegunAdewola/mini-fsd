@@ -531,7 +531,7 @@ scale and shift on the pixels the floor model marks.
   add a column of points where their bottom edge meets the floor. ROS-free.
   Test: with fake models, a box becomes points at its floor position; floor
   pixels never become obstacles.
-- [ ] M4.6 `[R]` feat(perception): `perception_node` takes `source:=model` or
+- [x] M4.6 `[R]` feat(perception): `perception_node` takes `source:=model` or
   `truth`; in model mode it reads the RGB image, runs the pipeline, and also
   publishes the floor mask and boxes for RViz. Test: ROS smoke test, an image in
   gives a cloud out in both modes.
@@ -1097,3 +1097,11 @@ Add a row at the end of each session.
   (A1); bringing the floor model down is E6's first job, with INT8, ONNX
   Runtime's transformer fusions and CoreML as the candidates. The picked stack
   is about 262 ms in ONNX Runtime for now.
+- **2026-11-26** M4.6: `perception_node` runs `source:=truth` (R10) or
+  `source:=model`: RGB through the ONNX models and the M4.5 pipeline, newest
+  frame only (queue depth 1). It also publishes `perception/overlay` (floor
+  tinted, boxes drawn; `minifsd.demo.overlay.draw_boxes`, new) and logs how
+  often the floor set the depth scale. `pixi run nav` takes `perception:=model`
+  (default `truth`, so R8 is unchanged), and RViz has a Perception panel. The
+  fallback scale is the student's global fit on 300 v10 train frames, 1 / depth
+  = 0.172 d + 0.543 (AbsRel 0.29 on v10 val used alone).

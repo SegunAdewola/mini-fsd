@@ -147,6 +147,17 @@ Visualization Manager:
       Min Value: 0
       Max Value: 10
       Value: true
+    # perception:=model only: floor tinted green, boxes drawn (M4.6).
+    - Class: rviz_default_plugins/Image
+      Name: Perception
+      Enabled: true
+      Topic:
+        Value: /perception/overlay
+        Depth: 1
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

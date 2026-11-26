@@ -24,11 +24,14 @@ import launch_ros.actions
 import launch_ros.parameter_descriptions
 from ament_index_python.packages import get_package_share_directory
 
+import minifsd
 from minifsd.world import floor_plan, occupancy
 
 SHARE = pathlib.Path(get_package_share_directory("mini_fsd_bringup"))
 PARAMS = str(SHARE / "config" / "nav2.yaml")
 SIM_TIME = {"use_sim_time": True}
+# The exported models (M4.4): src/minifsd/__init__.py -> repo root.
+MODELS = pathlib.Path(minifsd.__file__).resolve().parents[2] / "data/models"
 # Started and kept alive by the lifecycle manager, in this order.
 NAV2_NODES = [
     ("nav2_map_server", "map_server"),
@@ -80,6 +83,7 @@ def generate_launch_description() -> launch.LaunchDescription:
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
     clutter = launch.substitutions.LaunchConfiguration("clutter")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
+    perception = launch.substitutions.LaunchConfiguration("perception")
 
     sim = launch.actions.IncludeLaunchDescription(
         launch.launch_description_sources.PythonLaunchDescriptionSource(
@@ -115,6 +119,11 @@ def generate_launch_description() -> launch.LaunchDescription:
             # Off the map on purpose: only the camera can see these (R10).
             launch.actions.DeclareLaunchArgument("clutter", default_value="6"),
             launch.actions.DeclareLaunchArgument("rviz", default_value="true"),
+            # truth: the sim's exact depth (R10); model: the ONNX models
+            # on the RGB image (M4.6).
+            launch.actions.DeclareLaunchArgument(
+                "perception", default_value="truth"
+            ),
             sim,
             # ADR 0004: the sim's odom is the true pose, so map = odom.
             launch_ros.actions.Node(
@@ -124,13 +133,16 @@ def generate_launch_description() -> launch.LaunchDescription:
                 arguments=["--frame-id", "map", "--child-frame-id", "odom"],
             ),
             launch.actions.OpaqueFunction(function=_map_server),
-            # Camera depth to obstacle points for the local costmap (R10).
+            # The camera to obstacle points for the costmaps (R10, M4.6).
             launch_ros.actions.Node(
                 package="mini_fsd_perception",
                 executable="perception_node",
                 name="perception",
                 output="screen",
-                parameters=[SIM_TIME],
+                parameters=[
+                    SIM_TIME,
+                    {"source": perception, "models_dir": str(MODELS)},
+                ],
             ),
             # Same seed as the sim, so room numbers match the world.
             launch_ros.actions.Node(
