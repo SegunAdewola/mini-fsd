@@ -165,7 +165,12 @@ def evaluate(
     if candidate.task == "floor":
         f = floor_eval.evaluate_floor(samples, candidate.predict)
         n, p50, p95 = f.n_images, f.p50_ms, f.p95_ms
-        metrics = {"iou": f.iou, "iou_bottom_floor": f.iou_bottom_floor}
+        metrics = {
+            "iou": f.iou,
+            "iou_bottom_floor": f.iou_bottom_floor,
+            "precision": f.precision,
+            "recall": f.recall,
+        }
     elif candidate.task == "detect":
         n, p50, p95, metrics = _evaluate_detect(candidate, samples)
     else:

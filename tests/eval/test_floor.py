@@ -89,3 +89,29 @@ def test_latency_is_recorded() -> None:
 def test_no_samples_raises() -> None:
     with pytest.raises(ValueError):
         floor.evaluate_floor([], lambda rgb: rgb)
+
+
+def test_precision_and_recall_are_summed_over_the_dataset() -> None:
+    # Bottom 7 rows called floor everywhere. Image 1 has 6 floor rows:
+    # 60 right, 10 false. Image 2 has none: 70 false. Image 3 has 8: 70
+    # right, 10 missed. So 130 right, 80 false, 10 missed.
+    pred = np.zeros((10, 10), bool)
+    pred[-7:] = True
+    result = floor.evaluate_floor(SAMPLES, lambda rgb: pred)
+    assert result.precision == pytest.approx(130 / 210)
+    assert result.recall == pytest.approx(130 / 140)
+
+
+def test_precision_skips_unlabeled_pixels_and_is_nan_with_no_floor_called() -> (
+    None
+):
+    s = _sample(1, 6)
+    s.labeled[-3:] = False  # three floor rows nobody labelled
+    pred = np.zeros((10, 10), bool)
+    pred[-6:] = True
+    result = floor.evaluate_floor([s], lambda rgb: pred)
+    assert result.precision == 1.0 and result.recall == 1.0
+    empty = floor.evaluate_floor(
+        [_sample(2, 6)], lambda rgb: np.zeros((10, 10), bool)
+    )
+    assert math.isnan(empty.precision) and empty.recall == 0.0

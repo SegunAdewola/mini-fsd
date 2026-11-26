@@ -51,6 +51,11 @@ class FloorResult:
         n_bottom_floor: Images whose ground truth is floor at the bottom
             centre: the case a forward robot camera is in.
         iou_bottom_floor: Micro IoU over just those images.
+        precision: Of the pixels called floor, the share that are floor,
+            summed over the dataset; NaN if nothing was called floor. Low
+            precision is the dangerous error: the robot plans over a table.
+        recall: Of the floor pixels, the share found; NaN if there were
+            none.
         p50_ms: Median time per image, milliseconds.
         p95_ms: 95th percentile time per image, milliseconds.
         per_image: (sample index, IoU) for every image, for finding failures.
@@ -60,6 +65,8 @@ class FloorResult:
     iou: float
     n_bottom_floor: int
     iou_bottom_floor: float
+    precision: float
+    recall: float
     p50_ms: float
     p95_ms: float
     per_image: tuple[tuple[int, float], ...]
@@ -90,6 +97,7 @@ def evaluate_floor(
         ValueError: If there are no samples.
     """
     inter = union = inter_b = union_b = n_bottom = 0
+    called = actual = 0  # predicted floor pixels; true floor pixels
     times: list[float] = []
     per_image: list[tuple[int, float]] = []
     for s in samples:
@@ -98,6 +106,8 @@ def evaluate_floor(
         times.append(time.perf_counter() - start)
         i, u = metrics.intersection_union(pred, s.floor, s.labeled)
         inter, union = inter + i, union + u
+        called += int(np.count_nonzero(pred & s.labeled))
+        actual += int(np.count_nonzero(s.floor & s.labeled))
         per_image.append((s.index, 1.0 if u == 0 else i / u))
         h, w = s.floor.shape
         if s.floor[h - 1 - BOTTOM_ROWS_UP, w // 2]:
@@ -111,6 +121,8 @@ def evaluate_floor(
         iou=inter / union if union else 1.0,
         n_bottom_floor=n_bottom,
         iou_bottom_floor=inter_b / union_b if union_b else float("nan"),
+        precision=inter / called if called else float("nan"),
+        recall=inter / actual if actual else float("nan"),
         p50_ms=float(np.percentile(ms, 50)),
         p95_ms=float(np.percentile(ms, 95)),
         per_image=tuple(per_image),

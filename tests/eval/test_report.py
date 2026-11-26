@@ -164,3 +164,75 @@ def test_an_untimed_run_shows_no_latency_and_stays_off_the_front(
     assert not da3.on_front  # no latency, so no place on a latency front
     text = report.markdown(lines, "iou")
     assert "nan" not in text
+
+
+def test_latex_table_has_the_asked_columns_and_marks_the_front(
+    tmp_path: pathlib.Path,
+) -> None:
+    rows = [
+        *FIXTURE,
+        {
+            **_row("dino", "nyuv2-val", 0.47, 91.0),
+            "metrics": {"iou": 0.47, "precision": 0.75},
+        },
+    ]
+    runs = report.latest(report.load(_log(tmp_path, rows)), threads=2)
+    text = report.latex(
+        runs,
+        "floor",
+        [("iou", "nyuv2-val"), ("precision", "nyuv2-val"), ("iou", "sim:v9")],
+        latency_from="nyuv2-val",
+        names={"dino": "DINOv2-S"},
+    )
+    lines = text.splitlines()
+    assert lines[0].startswith("\\begin{tabular}")
+    header = next(x for x in lines if x.startswith("Model"))
+    assert "IoU nyuv2-val" in header and "Precision nyuv2-val" in header
+    assert "IoU v9" in header and "p50" in header
+    body = [
+        x for x in lines if x.endswith("\\\\") and not x.startswith("Model")
+    ]
+    assert len(body) == 3
+    # Best first on the first column; the front marked with a dagger.
+    assert body[0].startswith(
+        "DINOv2-S$^\\dagger$ & 0.470 & 0.750 & 0.960 & 91"
+    )
+    assert body[1].startswith("segformer & 0.370 & -- & 0.990 & 134")
+    assert body[2].startswith("classical$^\\dagger$ & 0.330 & -- & --")
+
+
+def test_dataset_labels_drop_the_folder_path() -> None:
+    assert report.dataset_label("sim:data/sim/v10/val") == "v10 val"
+    assert report.dataset_label("nyuv2-val") == "nyuv2-val"
+    assert (
+        report.dataset_label("coco:data/coco-people/val") == "coco-people val"
+    )
+
+
+def test_latency_comes_only_from_the_clean_runs_when_given(
+    tmp_path: pathlib.Path,
+) -> None:
+    # Accuracy from the newest run; latency from a separate log of runs
+    # made in one cool session, so a noisy rerun can't replace it.
+    accuracy = report.latest(
+        report.load(
+            _log(
+                tmp_path,
+                [
+                    _row("dino", "nyuv2-val", 0.47, 109.0),
+                    _row("seg", "nyuv2-val", 0.37, 139.0),
+                ],
+            )
+        ),
+        threads=2,
+    )
+    clean_log = tmp_path / "clean.jsonl"
+    clean_log.write_text(
+        json.dumps(_row("dino", "nyuv2-val", 0.40, 82.0)) + "\n"
+    )
+    clean = report.latest(report.load(clean_log), threads=2)
+    merged = {r.candidate: r for r in report.with_latency(accuracy, clean)}
+    assert merged["dino"].metrics["iou"] == 0.47  # accuracy kept
+    assert (merged["dino"].p50_ms, merged["dino"].p95_ms) == (82.0, 164.0)
+    # No clean run: no latency at all, rather than the noisy one.
+    assert merged["seg"].p50_ms is None and merged["seg"].p95_ms is None
