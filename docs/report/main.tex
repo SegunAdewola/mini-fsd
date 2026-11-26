@@ -3,7 +3,15 @@
 % minifsd.eval.report, never typed by hand; figures from docs/report/figures.
 % Each section's comment says what it holds and where its numbers come from.
 \documentclass[conference]{IEEEtran}
-\usepackage[T1]{fontenc}
+% tectonic runs XeTeX: load Times (TeX Gyre Termes) directly, not via T1.
+\usepackage{fontspec}
+% By file name: the fonts are in tectonic's bundle, not installed on the Mac.
+\setmainfont{texgyretermes}[
+  Extension=.otf,
+  UprightFont=*-regular,
+  BoldFont=*-bold,
+  ItalicFont=*-italic,
+  BoldItalicFont=*-bolditalic]
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath}
@@ -42,10 +50,126 @@ Northeastern University}}
 % (R5 to R9), ground-truth pose (ADR 0004). One figure: the pipeline.
 
 \section{Synthetic Data Engine}
-% D1 to D12: cameras (height, pitch, field of view), looks (floors, walls,
-% glass, lighting), signs, doors, camera effects, poses that see open floor,
-% boxes for detection, COCO people, and furniture with floor-like textures.
-% Split by floor plan. v9 and v10 sizes and box counts from the plan's log.
+\label{sec:data}
+
+The robot learns perception from rendered frames alone, so the renderer has
+to supply the labels as well as the images. MuJoCo~\cite{todorov2012mujoco}
+renders RGB, depth and a per-pixel geometry id from the robot's camera, and
+the floor mask, depth map and object boxes all come from those renders. Every
+label is exact, and none costs any human time.
+
+\subsection{Worlds}
+
+A frame starts from a floor plan generated from an integer seed: a hallway
+1.8--3.0\,m wide between two rows of rooms, 2 to 6 rooms on a side, each room
+3.0--4.5\,m wide and 3.0--5.0\,m deep. Every room has a framed door
+0.9--1.2\,m wide and a number sign beside it on the hallway side. Each plan
+also gets clutter that stays off the navigation map, so the robot can only
+learn about it through the camera. The splits are by plan. Train, validation
+and test draw seeds from ranges that never overlap, so no model is tested on
+a layout it trained on.
+
+\subsection{Randomization}
+
+Following domain randomization~\cite{tobin2017domain}, every plan gets its own
+look and every frame its own camera (Table~\ref{tab:randomization}). The
+camera ranges from robot height to a phone held at chest height, tilted down,
+because the real test photos are taken by hand. Floors are drawn from four
+pattern families, and the other surfaces get muted colours, which is what
+offices mostly look like; one plan in five breaks that rule with any colour
+at all. Half the plans turn part of the hallway front to glass, as on the
+campus floors. Glass is drawn see-through but labelled as wall, since the
+robot can't drive through it. Room signs use six stroke fonts, sometimes with
+a word above the number, and the plate and text colours are redrawn until
+their luma differs by at least 0.4, so every sign stays legible. Last, each
+frame passes through camera effects in the order a real sensor applies them:
+blur, gain and noise, gamma, then JPEG compression.
+
+Poses needed one fix. The first engine placed the camera anywhere with
+0.35\,m of clearance, and 10\% of frames then showed less than 2\% floor: the
+camera faced a wall from half a metre away. Each pose now needs open floor
+for at least 1\,m beyond the point where the bottom of the view meets the
+floor, which takes the camera's height, pitch and field of view into
+account. With that check no frame in 10{,}000 had under 2\% floor.
+
+\begin{table}[t]
+\caption{What the data engine randomizes}
+\label{tab:randomization}
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Per & What & Range \\
+\midrule
+frame & camera height & 0.3--1.6\,m \\
+frame & pitch, roll & down to 25$^\circ$, $\pm 5^\circ$ \\
+frame & vertical field of view & 50--75$^\circ$ \\
+frame & blur & 50\%, $\sigma \le 1.5$\,px \\
+frame & motion blur & 30\%, up to 6\,px \\
+frame & noise $\sigma$ & up to 8 (of 255) \\
+frame & exposure, gamma & $\times$0.6--1.5; 0.8--1.25 \\
+frame & JPEG & 70\%: quality 40--95 \\
+plan & floor pattern & checker, tiles, carpet, plain \\
+plan & floor pattern period & 0.3--2.0\,m \\
+plan & colours & muted; any colour in 20\% \\
+plan & glass hallway front & half the plans: 30--100\% \\
+plan & side light & 20--70$^\circ$ above horizon \\
+plan & ambient light & 0.05--0.35 \\
+plan & signs & 6 fonts; word in 40\% \\
+plan & sign contrast & luma $\ge 0.4$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Labels}
+
+The floor mask is every pixel whose geometry is the floor. Depth is metres
+along the optical axis, saved as 16-bit millimetres. Boxes for four classes
+(obstacle, door, room sign and person) come from two extra label renders. In
+the first, glass is hidden, so an obstacle behind a glass wall still gets its
+box. In the second, an invisible panel fills each doorway, because an open
+door is otherwise a hole with no pixels to draw a box around. Boxes cover the
+visible part of an object and need at least 40 pixels.
+
+\subsection{People and Furniture}
+
+The simulator has no people, and rendered humans look little like real ones,
+so the person class comes from COCO 2017~\cite{lin2014coco}: 5{,}000 training
+and 500 validation images, each with a person of at least $32\times32$\,px.
+COCO labels its own chairs, couches, tables, benches, bags, plants, beds,
+fridges and bicycles, and we relabel those as obstacle; kept as background,
+they would teach the detector that a real chair is nothing. COCO has no door
+or room-sign class, so the doors in its photos count as background. We
+accepted that for now.
+
+The second version of the data, v10, exists because of a failure. Floor
+models trained on v9 marked real counters, desks and beds as floor
+(Section~\ref{sec:e2}). In v9 the clutter was plain-coloured boxes and every
+floor was textured, so texture alone told floor from not-floor. v10 adds
+tables, a top on four legs with floor visible beneath, and desks, a top on
+two side panels. Table tops and boxes take their textures from the floor's
+own families, and in a quarter of the plans one furniture surface copies the
+floor exactly. Table~\ref{tab:datasets} gives the sizes. Rendering 10{,}000
+frames takes about 25 minutes on the M1.
+
+\begin{table}[t]
+\caption{Rendered datasets: frames and boxes per split}
+\label{tab:datasets}
+\centering
+\small
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Data & Split & Frames & Doors & Obstacles & Signs \\
+\midrule
+v9 & train & 9{,}000 & 11{,}234 & 6{,}064 & 4{,}700 \\
+v9 & val & 500 & 698 & 299 & 264 \\
+v9 & test & 500 & 524 & 368 & 233 \\
+v10 & train & 9{,}000 & 11{,}769 & 9{,}952 & 4{,}806 \\
+v10 & val & 500 & 718 & 492 & 271 \\
+v10 & test & 500 & 633 & 620 & 256 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Evaluation Harness and Edge Budget}
 % One harness for every candidate: same splits, metrics (floor IoU, mAP at
@@ -56,6 +180,7 @@ Northeastern University}}
 \section{Experiments}
 
 \subsection{E2: Floor Segmentation}
+\label{sec:e2}
 % SegFormer-B0 fine-tuned against frozen DINOv2 ViT-S/14 with a linear probe,
 % trained on v9, then both on v10 (E2c). Table from minifsd.eval.report:
 % nyuv2-val, v9 val, v10 val IoU, precision and recall, p50 latency. The

@@ -53,3 +53,7 @@ CLAUDE.md
 # uv run --with (used once to build the progress update PDF) leaves these
 uv.lock
 .venv/
+
+# The report PDF changes on every build; commit the final one at M6 with
+# git add -f docs/report/main.pdf.
+/docs/report/main.pdf

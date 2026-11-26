@@ -112,8 +112,17 @@ fmt = "ruff format . && ruff check --fix . && git ls-files -z '*.md' | xargs -0 
 lint-docs = "vale docs README.md"
 vale-sync = "vale sync"
 
+# The IEEE report (M6): tectonic builds LaTeX and fetches only the packages
+# the report uses, on first build. Its own env, so nothing else grows.
+[feature.report.dependencies]
+tectonic = "0.17.*"
+
+[feature.report.tasks]
+report = { cmd = "tectonic -X compile main.tex", cwd = "docs/report" }
+
 [environments]
 default = ["core", "lint"]
 core = { features = ["core"], no-default-feature = true }
 cv = { features = ["core", "cv"], no-default-feature = true }
 lint = { features = ["lint"], no-default-feature = true }
+report = { features = ["report"], no-default-feature = true }
