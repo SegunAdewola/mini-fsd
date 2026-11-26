@@ -873,3 +873,9 @@ Add a row at the end of each session.
   rebuilding the dataset on the session disk, so any resume in a new session
   would have failed; the resume test now checks for the dataset, and `train`
   rebuilds it first. YOLO also takes `--workers` (8 on Explorer).
+- **2026-11-26** Floor latencies remeasured in one cool session, nyuv2-val, M1,
+  2 threads (p50 / p95 ms): classical 3.3 / 4.3; DINOv2-S v9 81.8 / 86.0, v10
+  81.9 / 86.8; SegFormer-B0 v9 134.9 / 156.8, v10 129.7 / 149.5. The two DINOv2
+  runs now agree to 0.1 ms and p95 sits within 6% of p50, so the earlier spread
+  was heat. These are the report's E2 latencies. Both models are over the 50 ms
+  budget, DINOv2 by 1.6x; E6 (ONNX, INT8, smaller input) must close it.

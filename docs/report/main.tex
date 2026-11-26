@@ -1,0 +1,86 @@
+% Mini FSD: CS5330 final report (IEEE conference format). Due 2026-12-08.
+% Build: pixi run report (tectonic). Numbers come from the harness log via
+% minifsd.eval.report, never typed by hand; figures from docs/report/figures.
+% Each section's comment says what it holds and where its numbers come from.
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{url}
+
+\begin{document}
+
+\title{Mini FSD: Camera-Only Indoor Navigation\\
+Trained on Synthetic Data, Tested on Real Photos}
+
+\author{\IEEEauthorblockN{Oluwasegun Adewola}
+\IEEEauthorblockA{CS5330 Pattern Recognition and Computer Vision\\
+Northeastern University}}
+
+\maketitle
+
+\begin{abstract}
+% 150-200 words, written last: problem, approach (sim data engine + model
+% comparison under an edge budget), the headline numbers (E2c floor IoU on
+% real rooms, detection mAP, latency), and the main lesson.
+\end{abstract}
+
+\section{Introduction}
+% The robot, the camera-only constraint, why synthetic data (labels are free
+% and exact), why an edge budget (8 GB M1, 2 threads, 50 ms for perception).
+% Contributions as a short list: the data engine, the shared harness, the E1
+% to E3 comparisons, the furniture finding (D11, E2c).
+
+\section{Related Work}
+% Short: domain randomization (Tobin et al.), foundation features for
+% transfer (DINOv2/DINOv3), real-time detectors (YOLO26, RF-DETR), efficient
+% segmentation (SegFormer), monocular depth (Depth Anything V2 and 3).
+
+\section{System}
+% MuJoCo world from generated floor plans (R1 to R3), ROS 2 and Nav2 on top
+% (R5 to R9), ground-truth pose (ADR 0004). One figure: the pipeline.
+
+\section{Synthetic Data Engine}
+% D1 to D12: cameras (height, pitch, field of view), looks (floors, walls,
+% glass, lighting), signs, doors, camera effects, poses that see open floor,
+% boxes for detection, COCO people, and furniture with floor-like textures.
+% Split by floor plan. v9 and v10 sizes and box counts from the plan's log.
+
+\section{Evaluation Harness and Edge Budget}
+% One harness for every candidate: same splits, metrics (floor IoU, mAP at
+% IoU 0.5, AbsRel and delta1 with per-image and global fits) and latency on
+% the M1 under a 2-thread cap. Pareto front; the pick rule. Latency
+% measurement conditions (one cool session) and the untimed DA3 case.
+
+\section{Experiments}
+
+\subsection{E2: Floor Segmentation}
+% SegFormer-B0 fine-tuned against frozen DINOv2 ViT-S/14 with a linear probe,
+% trained on v9, then both on v10 (E2c). Table from minifsd.eval.report:
+% nyuv2-val, v9 val, v10 val IoU, precision and recall, p50 latency. The
+% figure: accuracy against latency. Overlays of the counter/bed failure.
+
+\subsection{E1: Detection}
+% YOLO26n against RF-DETR Nano at 320 px on v10 plus COCO people; mAP at 0.5
+% per class on v10 val and COCO people val; latency through ONNX Runtime.
+
+\subsection{E3: Depth}
+% Depth Anything V2 Small (V5) against DA3 Small (accuracy only, run on
+% Colab) on NYUv2 test and v9 val; E3b if it lands.
+
+\subsection{Real Photos}
+% Floor 15 for model choice, floors 14 and 2 used once for final numbers
+% (P1 to P5). Fallback stated if campus access slipped.
+
+\section{Discussion}
+% What transferred and what didn't: the sim-val versus real gap, furniture,
+% glass, latency over budget and what E6 must do. Limitations.
+
+\section{Conclusion}
+% Three or four sentences.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
