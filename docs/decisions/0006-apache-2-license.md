@@ -1,6 +1,6 @@
 # ADR 0006: License the repo under Apache-2.0
 
-- Status: Accepted (revisit at M3)
+- Status: Accepted (M3 revisit done: see ADR 0008)
 - Date: 2026-11-21
 - Plan step: 0.2
 

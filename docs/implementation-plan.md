@@ -376,11 +376,18 @@ rule holds: 2 candidates per experiment.
   the winner of E2 gains too. Pick the floor model by nyuv2-val IoU within the
   latency budget, with precision as the tie-breaker (false floor is the unsafe
   error). Test: none new; the E2a and E2b tests cover the code.
-- [ ] E1a `[CV]` exp: YOLO26n fine-tuned on v9 train plus COCO people, scored by
-  T1's mAP on v9 val and COCO people val, plus latency. Check the AGPL question
-  (open follow-ups) before the weights go in the repo or the demo. Decide first
-  how COCO images, which have doors and signs nobody labeled, avoid teaching
-  that a real door is background.
+- [ ] E1a `[CV]` exp: YOLO26n (ultralytics 8.4.214, AGPL-3.0, ADR 0008)
+  fine-tuned on v10 train plus COCO people train, at 320 px (the camera's
+  width), scored by T1's mAP on v10 val and COCO people val, plus latency.
+  Changed 2026-11-25: v10 rather than v9 (it is v9 plus furniture, so strictly
+  more obstacles), and COCO's unlabeled doors and signs accepted for the first
+  run (pseudo-label later only if door AP on real photos is low). ultralytics
+  runs on Colab only: it pulls in pip OpenCV, which would clash with conda's in
+  the local environments. Training exports ONNX, and the harness scores that on
+  the M1 (needs onnxruntime in the `cv` env, asked at E1a). Test: the training
+  module's dataset and resume logic (ultralytics itself is not run locally); the
+  harness candidate turns ONNX output into `detection.Detection` boxes in image
+  pixels.
 - [ ] E1b `[CV]` exp: RF-DETR Nano, same data and scoring.
 - [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot through the harness, on
   NYUv2 test and v9 val, next to V5's Depth Anything V2 Small numbers, with the
@@ -795,3 +802,18 @@ Add a row at the end of each session.
   dashed line, every point named, front filled and the rest hollow so it reads
   in greyscale print. matplotlib-base 3.11 declared in `pixi.toml` (asked and
   agreed): it was already installed, but only as another package's dependency.
+- **2026-11-25** E1a code: `minifsd.train.yolo` builds the YOLO folder on the
+  session disk with the T3 adapters, trains from `yolo26n.pt` at 320 px into a
+  Drive run folder, resumes from `last.pt` when there is one, and exports
+  `best.onnx`. ADR 0008 settles the AGPL question left open in ADR 0006:
+  ultralytics 8.4.214 on Colab only, ONNX on the M1, repo stays Apache-2.0.
+  Tests use a fake `ultralytics` module, so they check our flow, not its
+  training.
+- **2026-11-25** Surprise: in the default (ROS) env, `test_pack.py` and
+  `test_adapters.py` had not run since E2a. ROS's `launch_testing` pytest plugin
+  imports every test file in a folder and catches `Exception`, but pytest's skip
+  is a `BaseException`, so the module-level `pytest.importorskip("torch")` in
+  `test_segformer.py` skipped the whole `tests/train` folder. Both torch test
+  files now use a `skipif` mark and import torch only when it is there. The core
+  suite went from 359 to 382 tests; nothing that came back fails. Rule from
+  here: no module-level `importorskip`.
