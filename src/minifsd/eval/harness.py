@@ -50,6 +50,9 @@ THREAD_ENV_VARS = (
 )
 NYU = pathlib.Path("data/nyuv2")
 FIT_IMAGES = 100  # train images for depth's global scale and shift (V5)
+# NYUv2 train images held out for picking models (E2, E3): NYUv2 test stays
+# clean for the final numbers. Never trained on, and never in the fit sample.
+VAL_IMAGES = 200
 # E2a's best checkpoint, copied from the run's best/ folder on Drive.
 SEGFORMER_DIR = pathlib.Path("data/models/floor-segformer-b0")
 
@@ -357,11 +360,40 @@ def make_candidate(
     return CANDIDATES[name](device, threads, input_size)
 
 
+def nyuv2_indices(name: str, splits: dict[str, list[int]]) -> list[int]:
+    """The NYUv2 images a dataset name stands for.
+
+    Args:
+        name: "nyuv2-train" or "nyuv2-test", the official splits;
+            "nyuv2-fit", the fixed sample of FIT_IMAGES train images for
+            depth's global scale and shift (V5); or "nyuv2-val", VAL_IMAGES
+            other train images for picking models. A model trained on
+            NYUv2 train (E3b) must leave nyuv2-val out.
+        splits: From nyuv2.load_split.
+
+    Raises:
+        ValueError: For any other name.
+    """
+    if name in ("nyuv2-train", "nyuv2-test"):
+        return list(splits[name.removeprefix("nyuv2-")])
+    if name not in ("nyuv2-fit", "nyuv2-val"):
+        raise ValueError(f"unknown dataset {name!r}")
+    rng = np.random.default_rng(0)  # the same fit sample as V5
+    fit = sorted(
+        int(i) for i in rng.choice(splits["train"], FIT_IMAGES, replace=False)
+    )
+    if name == "nyuv2-fit":
+        return fit
+    rest = sorted(set(splits["train"]) - set(fit))
+    rng = np.random.default_rng(1)
+    return sorted(int(i) for i in rng.choice(rest, VAL_IMAGES, replace=False))
+
+
 def load_dataset(name: str, limit: int | None = None) -> Iterator[Any]:
     """Streams a dataset's samples.
 
-    Names: "nyuv2-train", "nyuv2-test" (Eigen crop), "nyuv2-fit" (the fixed
-    sample of FIT_IMAGES train images used for depth's global fit),
+    Names: "nyuv2-train", "nyuv2-test", "nyuv2-fit" and "nyuv2-val" (see
+    nyuv2_indices; all with the Eigen crop),
     "sim:<folder>" for a data engine split such as sim:data/sim/v7/val, and
     "coco:<folder>" for a folder with coco.json (detection), such as
     coco:data/sim/v9/val or coco:data/coco-people/val.
@@ -381,19 +413,11 @@ def load_dataset(name: str, limit: int | None = None) -> Iterator[Any]:
                 return
             yield frame
         return
-    if name not in ("nyuv2-train", "nyuv2-test", "nyuv2-fit"):
+    if not name.startswith("nyuv2-"):
         raise ValueError(f"unknown dataset {name!r}")
     from minifsd.data import nyuv2
 
-    splits = nyuv2.load_split(NYU / "splits.mat")
-    if name == "nyuv2-fit":
-        rng = np.random.default_rng(0)  # the same sample as V5
-        indices = sorted(
-            int(i)
-            for i in rng.choice(splits["train"], FIT_IMAGES, replace=False)
-        )
-    else:
-        indices = splits[name.removeprefix("nyuv2-")]
+    indices = nyuv2_indices(name, nyuv2.load_split(NYU / "splits.mat"))
     with nyuv2.NyuV2(NYU / "nyu_depth_v2_labeled.mat") as data:
         for i in indices[:limit]:
             yield nyuv2.crop(data[i])

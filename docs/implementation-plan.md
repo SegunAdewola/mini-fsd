@@ -708,3 +708,8 @@ Add a row at the end of each session.
   Colab extension; `drive.mount` works there. The install cell uses
   `--force-reinstall --no-deps`, so a new commit replaces the old install and
   Colab's numpy is left alone.
+- **2026-11-25** `nyuv2-val` in the harness: 200 NYUv2 train images (seed 1),
+  never in V5's `nyuv2-fit` sample, for picking floor and depth models; NYUv2
+  test stays clean. E3b must leave them out of its training data. Classical
+  floor baseline on it: IoU 0.333 (0.512 on images with floor in the bottom
+  strip), 3.3 ms p50 on the M1 with 2 threads.

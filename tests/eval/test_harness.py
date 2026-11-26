@@ -229,3 +229,47 @@ def test_the_segformer_candidate_loads_a_checkpoint_and_masks_floor(
     assert (c.name, c.task) == ("floor-segformer-b0", "floor")
     mask = c.predict(np.zeros((240, 320, 3), np.uint8))
     assert mask.shape == (240, 320) and mask.dtype == bool
+
+
+# NYUv2's official split: 795 train and 654 test images, 1-based indices into
+# the 1,449 labeled ones. Stand-ins with the same sizes, so the index choice
+# is tested without the 3 GB file.
+NYU_SPLITS = {
+    "train": list(range(1, 796)),
+    "test": list(range(796, 1450)),
+}
+
+
+def test_nyuv2_val_comes_from_train_and_never_from_the_fit_sample() -> None:
+    val = harness.nyuv2_indices("nyuv2-val", NYU_SPLITS)
+    fit = harness.nyuv2_indices("nyuv2-fit", NYU_SPLITS)
+    assert len(val) == harness.VAL_IMAGES
+    assert len(set(val)) == len(val)
+    assert set(val) <= set(NYU_SPLITS["train"])
+    assert not set(val) & set(fit)
+    assert not set(val) & set(NYU_SPLITS["test"])
+    assert val == sorted(val)
+    assert val == harness.nyuv2_indices("nyuv2-val", NYU_SPLITS)
+
+
+def test_the_fit_sample_is_still_the_one_v5_used() -> None:
+    # V5's depth numbers were fitted on this sample; adding nyuv2-val must
+    # not move it.
+    rng = np.random.default_rng(0)
+    v5 = sorted(
+        int(i)
+        for i in rng.choice(
+            NYU_SPLITS["train"], harness.FIT_IMAGES, replace=False
+        )
+    )
+    assert harness.nyuv2_indices("nyuv2-fit", NYU_SPLITS) == v5
+
+
+def test_nyuv2_train_and_test_are_the_official_splits() -> None:
+    for split in ("train", "test"):
+        assert (
+            harness.nyuv2_indices(f"nyuv2-{split}", NYU_SPLITS)
+            == NYU_SPLITS[split]
+        )
+    with pytest.raises(ValueError):
+        harness.nyuv2_indices("nyuv2-other", NYU_SPLITS)
