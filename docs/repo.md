@@ -49,9 +49,11 @@ mini-fsd/
 │   ├── mini_fsd_mission/        # mission_node (R9)  (planned)
 │   └── mini_fsd_perception/     # perception_node (R10)  (planned)
 ├── tools/                       # One-off scripts (spike checks, downloads)
-├── scripts/explorer/            # Training on Northeastern's Explorer (ADR 0007)
-│   ├── setup.sh                 # One-time venvs, data unpack, GPU check
-│   └── train.sbatch             # Slurm job: one minifsd.train module
+├── scripts/
+│   ├── latency.sh               # One cool session timing every candidate (T4)
+│   └── explorer/                # Training on Northeastern's Explorer (ADR 0007)
+│       ├── setup.sh             # One-time venvs, data unpack, GPU check
+│       └── train.sbatch         # Slurm job: one minifsd.train module
 ├── docs/
 │   ├── README.md                # Index of all docs
 │   ├── design.md                # Approved design
