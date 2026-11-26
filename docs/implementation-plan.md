@@ -1158,3 +1158,15 @@ Add a row at the end of each session.
   2.0 collisions per mission. The 40 bumps came from 5 missions, 27 of them on
   seed 4, so a world-specific miss (a box the depth places wrong, or misses) is
   more likely than a general weakness. Next: name what was hit.
+- **2026-11-26** M4.8 follow-up, what seed 4 hit. `Sim.robot_touching()` names
+  each contact and `sim_node` logs every new bump. A rerun of model seed 4: 22
+  bumps into clutter_3, a 1.1 x 1.0 m box near the middle of the hallway, and 20
+  into person_0, the one walker, whose lane runs through the 1.15 m gap beside
+  it. Rendered from 3 m and 2 m, the model pipeline puts the box's nearest face
+  within 5 cm of the truth and YOLO boxes it; from 1.2 m the face comes out 23
+  cm too far (0.76 against 0.53 m) and the box overflows the frame, so YOLO
+  loses it. The box hides most of the floor, so the scale fit rests on fewer,
+  farther floor pixels, and the 160 x 120 depth blurs the near face. The costmap
+  clears the correct marks along the new, too-long rays, so the box seems to
+  recede as the robot nears. Remedy for M5: a close-range safety stop that
+  doesn't trust the costmap.

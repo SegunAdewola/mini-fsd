@@ -669,8 +669,19 @@ without touching anything (Table~\ref{tab:loop}); with the exact depth all
 95\% interval of about 64 to 95\%. The collisions are not spread evenly.
 All 40 came from five missions, and 27 from one floor, which points to
 particular objects that the models place wrong rather than a general
-failing.
-% TODO: name what was hit (sim contact geoms) and say why.
+failing. On the worst floor, the sim's contact log names the two things
+hit: a large box set near the middle of the hallway, and the one walker,
+whose lane runs through the only gap beside it. Rendering the robot's view
+of that box shows why the models fail there and the exact depth does not.
+From 3 and 2\,m the model pipeline puts the box's nearest face within
+5\,cm of the truth, and the detector boxes it. From 1.2\,m it puts the face
+23\,cm too far away, and the detector loses the box, which now overflows
+the frame. Up close the box hides most of the floor, so the scale is fitted
+on fewer and more distant floor pixels, and the low-resolution depth blurs
+the near surface. The costmap then clears the correct marks made from
+farther back along the new, too-long rays, so the box seems to recede as the
+robot approaches. A close-range stop that does not rely on the costmap is
+the obvious remedy (Section~\ref{sec:discussion}).
 
 \subsection{Real Photos}
 \label{sec:real}
@@ -678,6 +689,7 @@ failing.
 % (P1 to P5). Fallback stated if campus access slipped.
 
 \section{Discussion}
+\label{sec:discussion}
 % What transferred and what didn't: the sim-val versus real gap, furniture,
 % glass, latency over budget and what E6 must do. Limitations.
 
