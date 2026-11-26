@@ -35,10 +35,45 @@ Northeastern University}}
 \end{abstract}
 
 \section{Introduction}
-% The robot, the camera-only constraint, why synthetic data (labels are free
-% and exact), why an edge budget (8 GB M1, 2 threads, 50 ms for perception).
-% Contributions as a short list: the data engine, the shared harness, the E1
-% to E3 comparisons, the furniture finding (D11, E2c).
+
+A delivery robot in an office building has to find the floor it can drive
+on, the doors and room numbers it is heading for, and the people and chairs
+in its way. Most indoor robots get the geometry from a laser scanner or a
+depth camera. This project asks how far one ordinary colour camera can go,
+with every perception model trained on synthetic images and the whole
+stack running on a laptop CPU.
+
+Synthetic data is the reason the question is practical for a one-person
+project. Labelling floor masks, depth and boxes by hand for thousands of
+real photos is out of reach, while a simulator produces all three exactly
+and for free. The cost is the gap between rendered and real images, and
+most of this report measures that gap: every model is chosen on held-out
+real images, never on renders.
+
+The edge budget makes the comparison concrete. Perception runs on an 8\,GB
+M1 MacBook Air with two CPU threads, and floor, boxes and depth together
+get 50\,ms per frame. A model that is more accurate but four times too slow
+does not count as better here. Each experiment therefore reports accuracy
+and latency side by side, measured by the same harness.
+
+The robot itself lives in MuJoCo~\cite{todorov2012mujoco}, driven by ROS~2
+and Nav2~\cite{macenski2020marathon}, so the models can be tested in the loop
+as well as on photos. The contributions are:
+\begin{itemize}
+\item a data engine that renders randomized office floors with exact floor
+masks, depth and boxes, and the finding that adding furniture to it, not
+more of the same, is what improved floor segmentation on real rooms
+(Sections~\ref{sec:data} and~\ref{sec:e2});
+\item one evaluation harness and an edge budget under which floor
+segmentation, detection and depth models are compared on real and
+synthetic images (E1 to E3);
+\item a test of a shared backbone against separate models (E4), which halves
+the cost but gives up too much on boxes and depth;
+\item metric depth from a relative model by fitting its scale to the visible
+floor in each frame, and a closed-loop comparison of camera-only
+perception against the simulator's exact depth
+(Section~\ref{sec:loop}).
+\end{itemize}
 
 \section{Related Work}
 
@@ -590,6 +625,52 @@ blocks, and learning the task weights instead of fixing them, as Kendall et
 al.\ do~\cite{kendall2018multitask}. As it stands, the shared model costs
 half as much and gives up little on floor, but too much on boxes and depth
 to replace the specialists.
+
+\subsection{Closed Loop}
+\label{sec:loop}
+
+The experiments so far score models on single images. The closed loop asks
+what the robot can do with them. The picked models run in ONNX Runtime on
+the camera image, and their output replaces the simulator's exact depth in
+Nav2's costmaps. The depth student's output is relative, so each frame's
+scale and shift are fitted on the pixels the floor model marks, against the
+depth that the camera's height and pitch give every floor pixel. A global
+fit from simulation is the fallback when too little floor is in view; in
+practice the floor set the scale in 99 to 100\% of frames.
+
+Each of five generated floors, with six boxes off the map and two walkers
+pacing the hallway, gets the same four missions (``go to room 105'') with
+the exact depth and with the models: 20 missions each. Walkers stop when
+their next step would bring them too close to the robot, so every collision
+is the robot driving into something. A mission fails if Nav2 gives up or
+after 120\,s of simulated time.
+
+\begin{table}[t]
+\caption{Closed loop: the same 20 missions with the simulator's exact depth
+and with the camera models. Clean: reached without touching anything.
+Median time over successful missions only. Bumps per mission.}
+\label{tab:loop}
+\centering
+\small
+% From runs/closed_loop/results.jsonl via minifsd.eval.closed_loop.summarize.
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Depth from & Reached & Clean & Median s & Bumps \\
+\midrule
+Simulator (exact) & 20/20 & 20/20 & 16 & 0.00 \\
+Camera models & 17/20 & 14/20 & 13 & 2.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With the camera alone the robot reached 17 of the 20 rooms, 14 of them
+without touching anything (Table~\ref{tab:loop}); with the exact depth all
+20 were reached cleanly. Twenty missions is a small sample: 17 of 20 has a
+95\% interval of about 64 to 95\%. The collisions are not spread evenly.
+All 40 came from five missions, and 27 from one floor, which points to
+particular objects that the models place wrong rather than a general
+failing.
+% TODO: name what was hit (sim contact geoms) and say why.
 
 \subsection{Real Photos}
 \label{sec:real}

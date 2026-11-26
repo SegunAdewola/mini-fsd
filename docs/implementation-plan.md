@@ -319,14 +319,22 @@ Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
   photos (same lens and settings as the protocol). Record fx, fy, cx, cy,
   distortion and the reprojection error here. Test: reprojection error under 1
   px; the intrinsics agree with the EXIF focal length within 5%.
-- [ ] P3 `[CV]` feat(data): floor masks with SAM 2 help: click points on the
-  floor, SAM 2 proposes the mask, fix by hand where needed. Floor 15 first,
-  since model choice needs val. New dependency (ask first; it could live in the
-  `cv` environment). Test: masks are binary, the photo's size, and saved next to
-  it; a mask round-trips through the loader.
-- [ ] P4 `[CV]` feat(data): boxes for doors, signs and obstacles on the real
-  photos, in the same COCO format as D8. Tool to be chosen at P4 (hand-drawn
-  boxes in a small OpenCV script, or SAM 2 box prompts).
+- [ ] P3 `[CV]` feat(data): the labelling tool, floor masks and boxes in one
+  pass per photo (decided 2026-11-26). SAM 2.1 small through transformers,
+  already in the `cv` env, so no new dependency (SAM 3 takes text prompts but
+  its weights are gated, as DINOv3's were). Left-click marks floor, right-click
+  not-floor, and SAM redraws the mask; boxes are dragged by hand (doors and
+  signs are rectangles) and given a class by key. Saved next to each photo: a
+  full-size binary `.floor.png` and a `.boxes.json` of D8's `Box2D` fields, so
+  P5 builds the COCO file with `boxes.to_coco`. Logic in
+  `minifsd.data.real_labels`, the window and SAM calls in `tools/label_real.py`.
+  Test: undo and reset of clicks; window to photo coordinates round-trip; a drag
+  in any direction gives a box clipped to the photo; the best of SAM's proposals
+  is kept; masks are binary and the photo's size; labels round-trip; finished
+  photos are skipped on resume.
+- [ ] P4 `[CV]` data: label every real photo with the P3 tool, floor 15 first
+  (model choice needs val). Every mask and box is checked by eye; the report
+  says SAM helped.
 - [ ] P5 `[CV]` data: freeze the real split. A manifest with each photo's
   SHA-256, floor and height; floors 14 and 2 are test, used once for the final
   numbers. Test: the loader refuses a test photo whose hash is not in the
@@ -537,7 +545,7 @@ scale and shift on the pixels the floor model marks.
   gives a cloud out in both modes.
 - [x] M4.7 `[R]` feat(world): moving person-sized obstacles in the sim. Test:
   they move, stay on the floor and never enter a wall.
-- [ ] M4.8 `[R]` exp: closed loop, the same missions with true depth and with
+- [x] M4.8 `[R]` exp: closed loop, the same missions with true depth and with
   model perception (decided 2026-11-26). 5 seeds x 4 rooms, both with
   `clutter:=6 people:=2`, 40 missions; one launch per seed and condition with
   the 4 missions in turn, so Nav2 starts 10 times, not 40. Per mission: the
@@ -1128,3 +1136,25 @@ Add a row at the end of each session.
   as the script's name ($0), so M4.6's model mode never ran from the task and
   RViz's Perception panel stayed empty. The tasks now end in `"$@"' nav`, and
   `pixi run nav --show-args` proves the arguments get through.
+- **2026-11-26** M4.8, first full run thrown out (records kept as
+  runs/closed_loop/results-run1-invalid.jsonl). Two surprises. (1) Seed 0's
+  launches in both conditions logged about 22,000 failed DDS writes to
+  172.20.10.8, a phone-hotspot address:
+  `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` limits discovery, but Cyclone still
+  sent from the Wi-Fi interface, so when the hotspot dropped the nodes stopped
+  hearing each other. `ros2_ws/cyclonedds.xml` now pins Cyclone to lo0 (unicast
+  discovery on 127.0.0.1, up to 64 participants), and Cyclone's own start-up
+  trace shows "selected interfaces: lo0, ownip 127.0.0.1" with the hotspot up.
+  (2) After a timeout the next mission's goal replaces the old one, Nav2 aborts
+  the old goal, and the runner took that "failed: room 106" as the new mission's
+  end, so each following mission "failed in 0 s". `closed_loop.outcome_of` now
+  counts only status lines naming the current room. The whole experiment was
+  rerun on the fixed setup.
+- **2026-11-26** M4.8 rerun, clean (no DDS errors or tracebacks in any of the 10
+  launches; model mode set its depth scale from the floor in 99 to 100% of
+  frames). Truth: 20 of 20 rooms reached, all without a collision, median 16 s.
+  Model: 17 of 20 reached (85%; about 64 to 95% at 95% confidence with 20
+  missions), 14 of 20 without a collision (70%), median 13 s over its successes,
+  2.0 collisions per mission. The 40 bumps came from 5 missions, 27 of them on
+  seed 4, so a world-specific miss (a box the depth places wrong, or misses) is
+  more likely than a general weakness. Next: name what was hit.
