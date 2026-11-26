@@ -301,7 +301,7 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   four legs that label as one obstacle; tops use their surface's material;
   furniture looks are drawn after every other look value.
 
-- [ ] D12 `[CV]` data: generate v10 with furniture, same split sizes and seeds
+- [x] D12 `[CV]` data: generate v10 with furniture, same split sizes and seeds
   as v9. Test: the split check; box counts per class; harness sanity run.
 
 Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
@@ -391,7 +391,7 @@ rule holds: 2 candidates per experiment.
   plane at run time. Target: under 50 ms on the M1 with AbsRel close to the
   teacher's. Test: the harness candidate returns depth in metres; the floor
   plane scale recovers a known camera height on sim frames within 5%.
-- [ ] T4 `[CV]` feat(eval): results table and accuracy against latency plot
+- [x] T4 `[CV]` feat(eval): results table and accuracy against latency plot
   (Pareto front) from results.jsonl, one per experiment, for the report. Test: a
   fixture log gives the expected table rows and front.
 - [ ] T5 `[CV]` docs: pick the winner of each experiment by the design's rule
@@ -784,3 +784,14 @@ Add a row at the end of each session.
   by DINOv2 on both nyuv2-val IoU and speed. The plot is the second half; it
   needs matplotlib declared in `pixi.toml` (today it is only there as something
   else's dependency).
+- **2026-11-25** D12 generated v10 with `--furniture --clutter 10`, the same
+  plans and seeds as v9 (train 450 plans / 9,000 frames, val and test 25 / 500
+  each; seed ranges disjoint). Boxes, train: door 11,769, obstacle 9,952 (v9:
+  6,064), room_sign 4,806; frames with no box about 20% (v9: 25%). Harness
+  sanity: classical floor IoU on v10 val 0.473 (v9 val 0.466). Packed: 30,006
+  files, 1,391 MB.
+- **2026-11-25** T4 done: `--plot` draws accuracy against p50 latency (log
+  scale), front as steps (no model lies between two front points), budget as a
+  dashed line, every point named, front filled and the rest hollow so it reads
+  in greyscale print. matplotlib-base 3.11 declared in `pixi.toml` (asked and
+  agreed): it was already installed, but only as another package's dependency.
