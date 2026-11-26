@@ -368,7 +368,7 @@ rule holds: 2 candidates per experiment.
   scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
   (open) stands in and the report says so. This tests the design's hypothesis
   that foundation features cross the sim-to-real gap better.
-- [ ] E2c `[CV]` exp: both floor models retrained on v10 (D12), with the E2a and
+- [x] E2c `[CV]` exp: both floor models retrained on v10 (D12), with the E2a and
   E2b recipes unchanged, scored on v9 val, v10 val and nyuv2-val (changed
   2026-11-25 from "the better of the two": a run costs 10 to 25 minutes of free
   GPU). SegFormer on v10 asks whether furniture in the sim fixes its false floor
@@ -843,3 +843,13 @@ Add a row at the end of each session.
   input and output layout and the class numbering come from reading rfdetr
   1.12.1's source (downloaded, not installed); the first real export confirms
   them.
+- **2026-11-25** E2c done. nyuv2-val IoU / precision / recall: SegFormer v9
+  0.367 / 0.42 / 0.74, SegFormer v10 0.482 / 0.55 / 0.81; DINOv2 v9 0.467 / 0.72
+  / 0.57, DINOv2 v10 0.516 / 0.75 / 0.63. Sim scores barely move (v10 val:
+  SegFormer 0.991, DINOv2 0.952). Furniture in the sim (D11) lifted both models
+  on real rooms, SegFormer the most (+0.115 IoU, +0.13 precision), but DINOv2 on
+  v10 is still the most accurate and the most precise: SegFormer still marks 18%
+  of each image as floor against the true 11%. Front: classical, DINOv2 v9 and
+  DINOv2 v10 (latencies from different hours of the day; to be remeasured in one
+  cool session, see above). Floor pick for T5: DINOv2 v10, pending real floor 15
+  and the latency work in E6.
