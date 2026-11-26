@@ -144,10 +144,8 @@ end. Big integration problems show up now, not in December.
   known camera give it back within 1% (property); corners on a warped board
   image are found within 0.5 px; a blank image finds none. The real camera is
   checked in P2.
-- [ ] V4b `[CV]` feat(geometry): the ground-plane mapping from a floor pixel to
-  metres, from camera height and pitch. Only needed for metric depth scale from
-  the floor (future work in E3b), so it waits. Test: pixel to floor to pixel
-  round-trips (property); pixels above the horizon return no point.
+- [x] V4b `[CV]` feat(geometry): the ground-plane mapping from a floor pixel to
+  metres. Moved to M4.1 (2026-11-26), where the per-frame depth scale needs it.
 - [x] V5 `[CV]` feat(perception): zero-shot Depth Anything V2 Small on NYUv2
   test, with metric scale from a least-squares fit (report both) and M1 latency.
   Needs the pixi `cv` environment (torch, transformers); discuss before adding.
@@ -369,16 +367,17 @@ rule holds: 2 candidates per experiment.
   each format and back to pixels; every image keeps its labels; class ids match
   `boxes.CATEGORIES`.
 
-- [ ] E2a `[CV]` exp: SegFormer-B0 (ImageNet-pretrained, Hugging Face) for floor
+- [x] E2a `[CV]` exp: SegFormer-B0 (ImageNet-pretrained, Hugging Face) for floor
   segmentation on v9 train. Score floor IoU on v9 val and the NYUv2 val subset,
   and latency at the camera's size, through the harness. Test: the harness
   candidate loads a checkpoint and returns a (H, W) bool mask; results logged to
   runs/harness/results.jsonl.
 
-- [ ] E2b `[CV]` exp: frozen DINOv3 ViT-S/16 with a light head, same data and
+- [x] E2b `[CV]` exp: frozen DINOv3 ViT-S/16 with a light head, same data and
   scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
   (open) stands in and the report says so. This tests the design's hypothesis
-  that foundation features cross the sim-to-real gap better.
+  that foundation features cross the sim-to-real gap better. DINOv3 access never
+  came, so DINOv2 ViT-S/14 ran (2026-11-25).
 
 - [x] E2c `[CV]` exp: both floor models retrained on v10 (D12), with the E2a and
   E2b recipes unchanged, scored on v9 val, v10 val and nyuv2-val (changed
@@ -501,6 +500,45 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
 - [x] E4 `[CV]` exp: train HydraNet-lite on Explorer; score each head on its
   task's sets; compare against the specialists (E1, E2, E3 winners) on accuracy
   and on summed against shared latency.
+
+Steps written 2026-11-26 for perception in the loop (options chosen: ONNX
+Runtime for every model, depth scale fitted per frame on the floor, boxes into
+the costmap). The ROS env has no torch, and `pixi.toml` keeps it that way, so
+the models run as ONNX there, the runtime E6 times anyway. The student gives
+relative depth; a global fit from NYUv2 is wrong for the sim and leaves AbsRel
+near 0.24 even on real rooms. The floor fixes both: the camera's height and
+pitch (TF) give every floor pixel a known depth, so each frame fits its own
+scale and shift on the pixels the floor model marks.
+
+- [x] M4.1 `[CV]` feat(geometry): `minifsd.geometry.ground`, where a pixel's ray
+  meets the floor (V4b): optical-axis depth and the point in base_link, from
+  intrinsics and the camera's pose. Test: a level camera sees row v at H fy / (v
+  \- cy); pixel to floor to pixel round-trips for any height and downward pitch
+  (property); a pixel at or above the horizon meets no floor.
+- [ ] M4.2 `[CV]` feat(perception): metric depth from relative disparity, scale
+  and shift fitted per frame on floor pixels against M4.1's floor depth, with a
+  global sim fit as the fallback when too little floor is in view. Test: a
+  synthetic room whose disparity is any positive scale and shift of the truth
+  comes back within 1% (property); too few floor pixels uses the fallback.
+- [ ] M4.3 `[R]` build: `onnx` and `onnxscript` in `cv` (export only) and
+  `onnxruntime` in the ROS env (the same 1.32 conda-forge build as `cv`). Test:
+  both envs solve; `import onnxruntime` works in the ROS env.
+- [ ] M4.4 `[CV]` feat(perception): ONNX export of the DINOv2 floor model and
+  the depth student, and ONNX Runtime wrappers with the same interface. Test:
+  ONNX and torch outputs agree within tolerance on random images.
+- [ ] M4.5 `[CV]` feat(perception): `minifsd.perception.pipeline`, RGB to floor
+  mask, boxes and metric depth, then obstacle points; person and obstacle boxes
+  add a column of points where their bottom edge meets the floor. ROS-free.
+  Test: with fake models, a box becomes points at its floor position; floor
+  pixels never become obstacles.
+- [ ] M4.6 `[R]` feat(perception): `perception_node` takes `source:=model` or
+  `truth`; in model mode it reads the RGB image, runs the pipeline, and also
+  publishes the floor mask and boxes for RViz. Test: ROS smoke test, an image in
+  gives a cloud out in both modes.
+- [ ] M4.7 `[R]` feat(world): moving person-sized obstacles in the sim. Test:
+  they move, stay on the floor and never enter a wall.
+- [ ] M4.8 `[R]` exp: closed loop, the same missions with true depth and with
+  model perception; success, collisions and time per mission.
 
 ## M5 Edge and safety
 
