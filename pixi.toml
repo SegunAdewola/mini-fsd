@@ -37,6 +37,11 @@ ros-jazzy-teleop-twist-keyboard = "*"  # drive /cmd_vel from the keyboard
 ros-jazzy-foxglove-bridge = "*"        # optional web/desktop viewer
 ros-jazzy-rmw-cyclonedds-cpp = "*"     # DDS transport (see activation.env)
 
+# Models in the loop (M4) run as ONNX, so the ROS env needs only the runtime,
+# not torch. Same version and conda-forge build as the cv env, so a model
+# exported there behaves the same here.
+onnxruntime = "1.32.*"
+
 # Building ROS packages
 colcon-common-extensions = "*"
 compilers = "*"
@@ -86,6 +91,11 @@ typecheck = "mypy"
 pytorch = "2.14.*"
 transformers = "*"   # Depth Anything V2 and other Hugging Face models
 onnxruntime = "1.32.*"   # exported detectors (E1, ADR 0008), and E6 / the demo
+# torch.onnx's exporter needs both: onnx for the model format, onnxscript for
+# torch 2.x's default (dynamo) exporter. Export only (M4.4); nothing at run
+# time imports them.
+onnx = "1.23.*"
+onnxscript = "0.7.*"
 # Apple Accelerate (the M1's AMX matrix unit) instead of OpenBLAS: 2.2x faster
 # CPU torch on Depth Anything V2 Small (V5). Same torch build either way.
 libblas = { version = "*", build = "*accelerate" }
