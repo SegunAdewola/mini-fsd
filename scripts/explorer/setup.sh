@@ -24,6 +24,10 @@ readonly TRANSFORMERS="transformers==5.24.0" # as in the local cv env
 readonly ULTRALYTICS="ultralytics==8.4.214"  # ADR 0008
 readonly RFDETR="rfdetr[train]==1.12.1"      # E1b
 readonly DA3="depth-anything-3==0.1.1"       # E3a
+# uv's download cache on scratch, beside the venvs: the torch wheels are
+# gigabytes (home quotas are small), and on one filesystem uv hard-links
+# from the cache instead of copying.
+export UV_CACHE_DIR="${ROOT}/uv-cache"
 
 uv_bin() {
   if ! command -v uv >/dev/null 2>&1; then

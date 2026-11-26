@@ -172,10 +172,77 @@ v10 & test & 500 & 633 & 620 & 256 \\
 \end{table}
 
 \section{Evaluation Harness and Edge Budget}
-% One harness for every candidate: same splits, metrics (floor IoU, mAP at
-% IoU 0.5, AbsRel and delta1 with per-image and global fits) and latency on
-% the M1 under a 2-thread cap. Pareto front; the pick rule. Latency
-% measurement conditions (one cool session) and the untimed DA3 case.
+\label{sec:harness}
+
+Every number in this report comes from one program, the harness. A candidate
+is any function from an RGB image to its task's output: a floor mask, a depth
+map up to scale, or a list of boxes. The harness runs it over a dataset,
+scores the output and times each call, then appends the result to a log
+along with the git commit it ran from. The tables here are generated from
+that log, so a number in the text can always be traced to the exact run that
+produced it.
+
+\subsection{Datasets and Metrics}
+
+Models are picked on validation data only (Table~\ref{tab:evalsets}). Real
+indoor images come from NYU Depth V2~\cite{silberman2012indoor}, cut to the
+crop of Eigen et~al.~\cite{eigen2014depth}. Its official test split is used
+once, for final numbers. For choosing between models we hold out 200 images
+from its training split instead, chosen with a fixed seed and kept apart from
+the 100 images used to fit depth scale.
+
+Floor segmentation is scored by intersection over union, summed over the
+whole dataset rather than averaged per image, so a large floor counts for
+more than a sliver. Pixels nobody labelled in NYUv2 are left out. Detection
+uses mean average precision at IoU 0.5, computed the PASCAL VOC way with
+all-point interpolation~\cite{everingham2010pascal}; COCO's crowd regions are
+neither hits nor misses. Depth models predict disparity that is right only up
+to a scale and shift, so we fit both by least squares in two ways: per image
+against its own ground truth, which no deployed robot could do and so gives
+an upper bound, and once over the 100 fit images, applied unchanged to every
+test image, which is what the robot could actually do. We report AbsRel and
+$\delta_1$ for both.
+
+\begin{table}[t]
+\caption{Evaluation sets}
+\label{tab:evalsets}
+\centering
+\small
+\begin{tabular}{@{}lrl@{}}
+\toprule
+Set & Images & Used for \\
+\midrule
+NYUv2 test & 654 & final real-image numbers, once \\
+nyuv2-val & 200 & picking floor and depth models \\
+nyuv2-fit & 100 & the global depth scale and shift \\
+v9, v10 val & 500 each & sim validation \\
+COCO people val & 500 & the person class \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The Edge Budget}
+
+The robot's computer is an 8\,GB Apple M1, and perception gets two of its CPU
+threads. The harness enforces that before any model library loads: the
+OpenMP and BLAS thread variables are set to 2, then PyTorch, OpenCV and ONNX
+Runtime are each capped at 2 as well. Latency is wall-clock time per image,
+preprocessing and postprocessing included, after one warm-up call; we report
+the median and the 95th percentile. The target from the design is 50\,ms for
+the whole perception stack, which gives 20 frames a second.
+
+Two practical rules came out of measuring. First, the M1 in this laptop has no
+fan, and a model timed early in a long session ran up to 40\% faster than the
+same model timed hours later. All latencies in this report were measured
+again in a single session on a cool machine, and the two runs of one
+architecture then agreed to 0.1\,ms. Second, Depth Anything~3 could only run
+on a cloud GPU (Section~\ref{sec:e3}), so its accuracy is scored here from
+saved predictions and its latency is left blank rather than reported from a
+different machine.
+
+The design's rule for picking a model is the most accurate one that fits the
+budget. Each experiment also shows the Pareto front: the candidates for which
+no other is both at least as accurate and at least as fast.
 
 \section{Experiments}
 
@@ -191,6 +258,7 @@ v10 & test & 500 & 633 & 620 & 256 \\
 % per class on v10 val and COCO people val; latency through ONNX Runtime.
 
 \subsection{E3: Depth}
+\label{sec:e3}
 % Depth Anything V2 Small (V5) against DA3 Small (accuracy only, run on
 % Colab) on NYUv2 test and v9 val; E3b if it lands.
 
