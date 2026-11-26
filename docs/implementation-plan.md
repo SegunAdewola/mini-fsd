@@ -368,9 +368,14 @@ rule holds: 2 candidates per experiment.
   scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
   (open) stands in and the report says so. This tests the design's hypothesis
   that foundation features cross the sim-to-real gap better.
-- [ ] E2c `[CV]` exp: the better of E2a and E2b retrained on v10 (D12), scored
-  on v9 val, v10 val and nyuv2-val, so the report shows what furniture in the
-  sim bought on real rooms.
+- [ ] E2c `[CV]` exp: both floor models retrained on v10 (D12), with the E2a and
+  E2b recipes unchanged, scored on v9 val, v10 val and nyuv2-val (changed
+  2026-11-25 from "the better of the two": a run costs 10 to 25 minutes of free
+  GPU). SegFormer on v10 asks whether furniture in the sim fixes its false floor
+  on counters and beds (nyuv2-val precision 0.42); DINOv2 on v10 asks whether
+  the winner of E2 gains too. Pick the floor model by nyuv2-val IoU within the
+  latency budget, with precision as the tie-breaker (false floor is the unsafe
+  error). Test: none new; the E2a and E2b tests cover the code.
 - [ ] E1a `[CV]` exp: YOLO26n fine-tuned on v9 train plus COCO people, scored by
   T1's mAP on v9 val and COCO people val, plus latency. Check the AGPL question
   (open follow-ups) before the weights go in the repo or the demo. Decide first
