@@ -50,6 +50,8 @@ THREAD_ENV_VARS = (
 )
 NYU = pathlib.Path("data/nyuv2")
 FIT_IMAGES = 100  # train images for depth's global scale and shift (V5)
+# E2a's best checkpoint, copied from the run's best/ folder on Drive.
+SEGFORMER_DIR = pathlib.Path("data/models/floor-segformer-b0")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -307,6 +309,20 @@ def _depth_anything(
     return Candidate(name, "depth", model.predict)
 
 
+def _floor_segformer(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
+    import torch
+
+    from minifsd.perception import floor_segformer
+
+    if input_size is not None:
+        raise ValueError("floor-segformer-b0 runs at 320 x 240; no input_size")
+    torch.set_num_threads(threads)
+    model = floor_segformer.FloorSegformer(SEGFORMER_DIR, device=device)
+    return Candidate("floor-segformer-b0", "floor", model.predict)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -314,6 +330,7 @@ def _depth_anything(
 CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "floor-classical": _floor_classical,
     "depth-anything-v2-small": _depth_anything,
+    "floor-segformer-b0": _floor_segformer,
 }
 
 

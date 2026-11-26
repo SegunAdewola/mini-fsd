@@ -213,3 +213,19 @@ def test_coco_folders_keep_crowd_regions(tmp_path: pathlib.Path) -> None:
     (folder / "coco.json").write_text(json.dumps(coco))
     first = next(iter(harness.load_dataset(f"coco:{folder}")))
     assert first.truth[0].crowd
+
+
+def test_the_segformer_candidate_loads_a_checkpoint_and_masks_floor(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # E2a: a run's best/ folder, copied to SEGFORMER_DIR, scored as "floor".
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.train import segformer
+
+    segformer.build_model(None).save_pretrained(tmp_path / "b0")
+    monkeypatch.setattr(harness, "SEGFORMER_DIR", tmp_path / "b0")
+    c = harness.make_candidate("floor-segformer-b0", device="cpu", threads=1)
+    assert (c.name, c.task) == ("floor-segformer-b0", "floor")
+    mask = c.predict(np.zeros((240, 320, 3), np.uint8))
+    assert mask.shape == (240, 320) and mask.dtype == bool

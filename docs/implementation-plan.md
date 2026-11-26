@@ -327,7 +327,7 @@ rule holds: 2 candidates per experiment.
   perfect boxes give 1.0; boxes shifted past IoU 0.5 give 0; a missed object
   lowers recall by its share (properties); a crowd match is neither a hit nor a
   false alarm.
-- [ ] T2 `[CV]` build: training on Colab's free tier (ADR 0007; Explorer is the
+- [x] T2 `[CV]` build: training on Colab's free tier (ADR 0007; Explorer is the
   fallback). `minifsd.train.pack` zips a dataset folder uncompressed for Google
   Drive; a thin notebook mounts Drive, installs the repo from GitHub at a pinned
   commit, copies and unzips the data, and calls `minifsd.train` modules;
@@ -701,3 +701,10 @@ Add a row at the end of each session.
   `data.yaml` is written as JSON, which YAML reads, so no YAML dependency. The
   question of unlabeled doors and signs on COCO images moved to E1a: it changes
   how the detector trains, not the adapters.
+- **2026-11-25** T2 done with E2a's code: `minifsd.train.segformer` trains a
+  tiny random SegFormer on 20 generated frames on CPU in the tests, writes
+  `last.pt`, `best/` and `log.jsonl`, and a second call resumes after the last
+  epoch instead of starting over. The notebook runs from VS Code through the
+  Colab extension; `drive.mount` works there. The install cell uses
+  `--force-reinstall --no-deps`, so a new commit replaces the old install and
+  Colab's numpy is left alone.
