@@ -461,6 +461,74 @@ does not change the license of the trained model.
 % Depth Anything V2 Small (V5) against DA3 Small (accuracy only, run on
 % Colab) on NYUv2 test and v9 val; E3b if it lands.
 
+\subsection{E4: One Backbone or Three Models}
+\label{sec:e4}
+
+The robot runs three perception models on every frame. E4 asks whether one
+backbone with a head per task can replace them, the layout Tesla calls a
+HydraNet, and what sharing costs in accuracy. \emph{HydraNet-lite} keeps E2's
+frozen DINOv2-S and runs it once per image. The floor head is E2b's probe on
+the same patch tokens. A shared neck (a $1\times1$ convolution to 256
+channels, upsampled to stride 7, then a $3\times3$ convolution) feeds the
+other two: depth is one $1\times1$ convolution to log depth, and boxes are
+CenterNet's heads~\cite{zhou2019objects}, a heatmap per class plus box size
+and centre offset.
+
+Only the heads train, on v10 train and the COCO person images together. A
+COCO image labels obstacles and people but not doors or signs, so those two
+heatmaps are masked out of the loss on COCO images. The loss adds CenterNet's
+focal heatmap loss and its size and offset terms (size weighted 0.1),
+cross-entropy for floor, and the scale-invariant log loss of Eigen et
+al.~\cite{eigen2014depth} for depth, all other weights 1. Twelve epochs took
+32\,s each on a V100; the frozen backbone keeps it that cheap.
+
+\begin{table}[t]
+\caption{E4: each HydraNet-lite head against the specialist picked for its
+task. Depth AbsRel is lower-better, with a per-image and a global scale fit.
+Latency on the M1, two threads.}
+\label{tab:e4}
+\centering
+\small
+% Numbers from runs/harness/results.jsonl (hydra-* and the specialists);
+% latency from latency.jsonl after scripts/latency.sh.
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Task & Metric, set & HydraNet & Specialist \\
+\midrule
+Floor & IoU, nyuv2-val & 0.499 & 0.516 \\
+Floor & IoU, v10 val & 0.953 & 0.952 \\
+Boxes & mAP, v10 val & 0.646 & 0.933 \\
+Boxes & mAP, COCO people & 0.288 & 0.406 \\
+Depth & AbsRel, per-image & 0.180 & 0.062 \\
+Depth & AbsRel, global & 0.299 & 0.234 \\
+\midrule
+All & p50 ms & ?? & ?? \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:e4} compares each head with the specialist picked for its
+task: DINOv2-S for floor, YOLO26n for boxes and Depth Anything V2-Small for
+depth. Floor holds up. The shared model loses 0.017 IoU on real rooms and
+nothing on sim, which is expected, since its floor head is the same probe on
+the same frozen features and only the training differs. The other two heads
+fall well short. Boxes reach 0.646 mAP on sim against YOLO26n's 0.933, and
+the gap is widest on doors (0.566 AP) and signs (0.723), the small classes.
+A frozen ViT sees the image as 14\,px patches, and our neck only upsamples
+that grid to stride 7; YOLO26n trains its whole network for boxes at several
+scales. Depth is not a like-for-like comparison: Depth Anything V2 was
+trained on millions of images, and our head is one convolution trained on
+sim depth. Its per-image AbsRel of 0.180 is about three times the
+specialist's.
+
+% LATENCY: hydra-all against the sum of the three specialists.
+The other half of the question is latency. HydraNet-lite runs all three heads
+in ??\,ms against ??\,ms for the three specialists in turn. Two changes might
+close the accuracy gap, and we tried neither: unfreezing the backbone's last
+blocks, and learning the task weights instead of fixing them, as Kendall et
+al.\ do~\cite{kendall2018multitask}. As it stands, sharing pays only for
+floor.
+
 \subsection{Real Photos}
 \label{sec:real}
 % Floor 15 for model choice, floors 14 and 2 used once for final numbers
