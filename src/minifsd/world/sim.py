@@ -172,8 +172,16 @@ class Sim:
         A wall, a box, a door frame or a walker all count (M4.8). The floor
         doesn't: the robot always stands on it.
         """
+        return len(self.robot_touching())
+
+    def robot_touching(self) -> list[str]:
+        """What the robot touches now, floor aside, one name per contact.
+
+        The geom's name (wall_3, a clutter box's part), or its body's name
+        where the geom has none (person_0, a walker).
+        """
         base = self.model.body("base").id
-        count = 0
+        names = []
         for contact in self.data.contact[: self.data.ncon]:
             a, b = int(contact.geom1), int(contact.geom2)
             mine = (
@@ -183,9 +191,11 @@ class Sim:
             if mine[0] == mine[1]:
                 continue  # neither geom is the robot's (or, impossibly, both)
             other = b if mine[0] else a
-            if other != self._floor_geom:
-                count += 1
-        return count
+            if other == self._floor_geom:
+                continue
+            geom = self.model.geom(other)
+            names.append(geom.name or self.model.body(geom.bodyid[0]).name)
+        return names
 
     def walker_positions(self) -> np.ndarray:
         """(N, 3) each walker's centre in the world, as the sim has it."""

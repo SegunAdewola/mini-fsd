@@ -142,7 +142,14 @@ class SimNode(rclpy.node.Node):
 
     def _tick(self) -> None:
         self._sim.step(self._dt)
-        self._bumps.update(self._sim.robot_contacts())
+        touching = self._sim.robot_touching()
+        before = self._bumps.total
+        self._bumps.update(len(touching))
+        if self._bumps.total > before:  # a new bump: say what was hit
+            self.get_logger().info(
+                f"bump {self._bumps.total} at t={self._sim.time:.1f} s: "
+                f"{', '.join(sorted(set(touching)))}"
+            )
         self._collisions_pub.publish(UInt32(data=self._bumps.total))
         stamp = _stamp(self._sim.time)
         self._clock_pub.publish(Clock(clock=stamp))

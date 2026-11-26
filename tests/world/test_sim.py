@@ -455,3 +455,16 @@ def test_driving_into_a_walker_is_a_contact() -> None:
         assert s.robot_contacts() > 0
     finally:
         s.close()
+
+
+def test_what_the_robot_touches_is_named() -> None:
+    x = PLAN.spawn.x + 1.0
+    still = people.Walker(x_start=x, x_end=x + 1.0, y=0.0, speed=0.0, phase=0.0)
+    s = sim.Sim(PLAN, walkers=[still])
+    try:
+        assert s.robot_touching() == []
+        _drive(s, 0.5, 0.0, 3.0)
+        assert mjcf.person_body(0) in s.robot_touching()  # the geom's body
+        assert s.robot_contacts() == len(s.robot_touching())
+    finally:
+        s.close()
