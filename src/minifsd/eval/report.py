@@ -233,12 +233,20 @@ NAMES = {
     "detect-rfdetr-nano": "RF-DETR Nano",
     "depth-anything-v2-small": "Depth Anything V2-S",
     "depth-da3-small": "Depth Anything 3-S",
+    "depth-student": "Distilled student",
+    "hydra-floor": "HydraNet-lite head",
+    "hydra-detect": "HydraNet-lite head",
+    "hydra-depth": "HydraNet-lite head",
 }
 METRIC_LABELS = {
     "iou": "IoU",
     "precision": "Precision",
     "recall": "Recall",
     "map50": "mAP@0.5",
+    "ap50_door": "Door AP",
+    "ap50_obstacle": "Obstacle AP",
+    "ap50_room_sign": "Sign AP",
+    "ap50_person": "Person AP",
     "abs_rel_global": "AbsRel",
     "delta1_global": "$\\delta_1$",
 }

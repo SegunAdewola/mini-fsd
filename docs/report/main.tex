@@ -427,10 +427,12 @@ and needs no suppression; it takes a stretched, not letterboxed, input.
 \caption{E1 detection. mAP at IoU 0.5, overall and per class, on the v10 sim
 validation set and on 500 held-out COCO person images; latency on the M1 with
 two threads through ONNX Runtime. $^\dagger$: on the Pareto front of v10 val
-mAP against latency.}
+mAP against latency. The HydraNet-lite row is E4's box head
+(Section~\ref{sec:e4}).}
 \label{tab:e1}
 \centering
-\small
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \input{tables/e1.tex}
 \end{table*}
 
@@ -444,10 +446,9 @@ still learned v10's boxes and tables far better than COCO's. This matches E2,
 where the model resting on DINOv2 features also carried over to real images
 better than the one trained end to end.
 
-% LATENCY: replace both numbers from latency.jsonl after scripts/latency.sh.
-The price is speed. YOLO26n runs in about 27\,ms per image, inside the 50\,ms
-budget on its own, and RF-DETR Nano in about 245\,ms, nine times slower and
-five times over the budget. By the design's rule YOLO26n is the pick. The gap
+The price is speed. YOLO26n runs in 21\,ms per image, inside the 50\,ms
+budget on its own, and RF-DETR Nano in 246\,ms, more than eleven times
+slower and five times over the budget. By the design's rule YOLO26n is the pick. The gap
 on real people is the cost of that choice, and it is the reason the real
 photos (Section~\ref{sec:real}) report person and obstacle recall separately.
 COCO has no door or sign class, so doors in COCO photos were trained as
@@ -502,7 +503,7 @@ Boxes & mAP, COCO people & 0.288 & 0.406 \\
 Depth & AbsRel, per-image & 0.180 & 0.062 \\
 Depth & AbsRel, global & 0.299 & 0.234 \\
 \midrule
-All & p50 ms & ?? & ?? \\
+All three & p50 ms & 96 & 942 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -521,13 +522,18 @@ trained on millions of images, and our head is one convolution trained on
 sim depth. Its per-image AbsRel of 0.180 is about three times the
 specialist's.
 
-% LATENCY: hydra-all against the sum of the three specialists.
-The other half of the question is latency. HydraNet-lite runs all three heads
-in ??\,ms against ??\,ms for the three specialists in turn. Two changes might
+Latency is where sharing pays. HydraNet-lite runs all three heads in 96\,ms,
+only 16\,ms more than the DINOv2 floor model alone, because the backbone is
+most of the cost and runs once. The three specialists in turn take 942\,ms,
+almost all of it Depth Anything V2. Swapping in E3's distilled student for
+depth brings them to 187\,ms, still twice HydraNet-lite's time. So sharing
+halves the cost even against the cheapest specialist set, and neither meets
+the 50\,ms budget yet. Two changes might
 close the accuracy gap, and we tried neither: unfreezing the backbone's last
 blocks, and learning the task weights instead of fixing them, as Kendall et
-al.\ do~\cite{kendall2018multitask}. As it stands, sharing pays only for
-floor.
+al.\ do~\cite{kendall2018multitask}. As it stands, the shared model costs
+half as much and gives up little on floor, but too much on boxes and depth
+to replace the specialists.
 
 \subsection{Real Photos}
 \label{sec:real}
