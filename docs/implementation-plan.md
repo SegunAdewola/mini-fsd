@@ -351,6 +351,7 @@ rule holds: 2 candidates per experiment.
   perfect boxes give 1.0; boxes shifted past IoU 0.5 give 0; a missed object
   lowers recall by its share (properties); a crowd match is neither a hit nor a
   false alarm.
+
 - [x] T2 `[CV]` build: training on Colab's free tier (ADR 0007; Explorer is the
   fallback). `minifsd.train.pack` zips a dataset folder uncompressed for Google
   Drive; a thin notebook mounts Drive, installs the repo from GitHub at a pinned
@@ -359,6 +360,7 @@ rule holds: 2 candidates per experiment.
   and unpack round trip keeps every file byte for byte; a training module's
   smoke run on 20 images on CPU (the `cv` environment) writes a checkpoint and
   resumes from it.
+
 - [x] T3 `[CV]` feat(train): dataset adapters from v9 and COCO people to each
   trainer's format: YOLO txt labels, RF-DETR's COCO folders, and floor-mask
   pairs for segmentation. Furniture on COCO images is labeled obstacle (D10,
@@ -366,15 +368,18 @@ rule holds: 2 candidates per experiment.
   the adapters are the same either way. Test: a box survives the round trip to
   each format and back to pixels; every image keeps its labels; class ids match
   `boxes.CATEGORIES`.
+
 - [ ] E2a `[CV]` exp: SegFormer-B0 (ImageNet-pretrained, Hugging Face) for floor
   segmentation on v9 train. Score floor IoU on v9 val and the NYUv2 val subset,
   and latency at the camera's size, through the harness. Test: the harness
   candidate loads a checkpoint and returns a (H, W) bool mask; results logged to
   runs/harness/results.jsonl.
+
 - [ ] E2b `[CV]` exp: frozen DINOv3 ViT-S/16 with a light head, same data and
   scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
   (open) stands in and the report says so. This tests the design's hypothesis
   that foundation features cross the sim-to-real gap better.
+
 - [x] E2c `[CV]` exp: both floor models retrained on v10 (D12), with the E2a and
   E2b recipes unchanged, scored on v9 val, v10 val and nyuv2-val (changed
   2026-11-25 from "the better of the two": a run costs 10 to 25 minutes of free
@@ -383,6 +388,7 @@ rule holds: 2 candidates per experiment.
   the winner of E2 gains too. Pick the floor model by nyuv2-val IoU within the
   latency budget, with precision as the tie-breaker (false floor is the unsafe
   error). Test: none new; the E2a and E2b tests cover the code.
+
 - [x] E1a `[CV]` exp: YOLO26n (ultralytics 8.4.214, AGPL-3.0, ADR 0008)
   fine-tuned on v10 train plus COCO people train, at 320 px (the camera's
   width), scored by T1's mAP on v10 val and COCO people val, plus latency.
@@ -395,6 +401,7 @@ rule holds: 2 candidates per experiment.
   module's dataset and resume logic (ultralytics itself is not run locally); the
   harness candidate turns ONNX output into `detection.Detection` boxes in image
   pixels.
+
 - [x] E1b `[CV]` exp: RF-DETR Nano (rfdetr 1.12.1, Apache-2.0, Colab only like
   ultralytics), same data, same 320 px input and same scoring as E1a. Exported
   to ONNX and scored through the same `detect_onnx` runtime, with RF-DETR's own
@@ -402,6 +409,7 @@ rule holds: 2 candidates per experiment.
   sigmoid logits) read from rfdetr 1.12.1's export code. Test: the training
   module's dataset, resume and export flow (fake `rfdetr`); decoding maps boxes
   to photo pixels and keeps two classes for one query.
+
 - [x] E3a `[CV]` exp: Depth Anything 3 Small zero-shot, next to V5's Depth
   Anything V2 Small, on NYUv2 test, nyuv2-val and v9 val, with the same
   per-image and global scale fits. Changed 2026-11-25 (option chosen: Colab-only
@@ -414,7 +422,8 @@ rule holds: 2 candidates per experiment.
   says why). Test: the key follows the pixels; export is lossless and skips
   repeats; predictions come back as 1/depth by key; an untimed candidate logs
   NaN latency, which the report shows as "—" and keeps off the front.
-- [ ] E3b `[CV]` exp: a small distilled depth network. Changed 2026-11-26: the
+
+- [x] E3b `[CV]` exp: a small distilled depth network. Changed 2026-11-26: the
   student is SegFormer-B0 with one output channel (relative disparity) at 160 x
   120, a quarter of E2a's pixels, aiming at the 50 ms budget; no new dependency
   (transformers has the MiT-b0 encoder; torchvision isn't installed). It learns
@@ -430,12 +439,34 @@ rule holds: 2 candidates per experiment.
   worse than a flat one (property), and it ignores invalid pixels; the teacher
   set never takes a nyuv2-val or nyuv2-fit image; training writes a checkpoint
   and resumes; the harness candidate returns (H, W) disparity.
+
 - [x] T4 `[CV]` feat(eval): results table and accuracy against latency plot
   (Pareto front) from results.jsonl, one per experiment, for the report. Test: a
   fixture log gives the expected table rows and front.
-- [ ] T5 `[CV]` docs: pick the winner of each experiment by the design's rule
+
+- [x] T5 `[CV]` docs: pick the winner of each experiment by the design's rule
   (most accurate inside the latency budget) and record the numbers and reasons
-  here. Real floor 15 confirms or overturns the floor pick once labeled.
+  here. Real floor 15 confirms or overturns the floor pick once labeled. Changed
+  2026-11-26: read strictly, the rule picks almost nothing. The 50 ms budget is
+  for the whole stack, and only YOLO26n (21 ms) and the classical floor (3 ms)
+  fit inside it. So the pick is the most accurate model for each task, kept only
+  if E6 can bring the stack it makes inside the budget:
+
+  - Floor: DINOv2-S v10 (nyuv2-val IoU 0.516, 80 ms).
+  - Boxes: YOLO26n (v10 val mAP 0.933, 21 ms). RF-DETR Nano is better on real
+    people (0.806 against 0.655 AP) but 246 ms on its own.
+  - Depth: the E3b student (86 ms), if the retrain keeps its accuracy. V2-Small
+    (841 ms) stays the teacher and the accuracy reference.
+  - Not HydraNet-lite: 96 ms for all three heads, but its box and depth heads
+    are too weak (E4).
+
+  The picked stack is 187 ms, so E6 must make it about 3.7 times faster. INT8
+  and ONNX Runtime alone usually give 2 to 3 times on a CPU, so E6 also needs
+  one of: smaller inputs, depth at a lower rate than floor and boxes (the
+  costmap tolerates older depth more than the floor mask does), or the floor and
+  depth models sharing a backbone. If that still misses, the fallback is a lower
+  perception rate, and the report says so. Ticked once the student retrain is
+  scored.
 
 ## M4 Model perception in the loop, E4 and E5
 
@@ -1006,3 +1037,12 @@ Add a row at the end of each session.
   dominates at that size; a question for E6. E1a, E1b and E4 done; the report
   has E1 and E4 with these numbers. V4 done: `find_corners` and `calibrate`,
   tested on generated boards.
+- **2026-11-26** E3b retrained with MiDaS's normalisation (15 epochs, 13 min on
+  a T4; run e3b-student-v2). The sign holds: the per-image fit inverts 1 of 120
+  nyuv2-val images and none of v10 val, and the global scale is positive
+  (0.068). nyuv2-val: AbsRel 0.137 / delta1 0.811 per image, 0.242 / 0.561
+  global, against the teacher's 0.062 / 0.957 and 0.234 / 0.573; v9 val per
+  image 0.064 / 0.942 against the teacher's 0.105 / 0.877; 86 ms against 841.
+  The first, inverted student is kept as data/models/depth-student-v1. E3b and
+  T5 done: the student is the depth pick. The report's E3 section has these
+  numbers.
