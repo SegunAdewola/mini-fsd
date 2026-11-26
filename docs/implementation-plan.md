@@ -422,10 +422,37 @@ rule holds: 2 candidates per experiment.
 
 ## M4 Model perception in the loop, E4 and E5
 
-Steps written at the end of M3. The chosen model replaces the R10 stub. E4
-HydraNet-lite vs separate models. E5 sim-only vs sim plus DR vs sim plus DR plus
-50 real images. Includes moving person-sized obstacles in the sim, so the
-navigation loop has to avoid people (decided 2026-11-25).
+The chosen model replaces the R10 stub. E5 (sim only vs sim plus DR vs sim plus
+DR plus 50 real images) waits for the real photos. Moving person-sized obstacles
+in the sim, so the navigation loop has to avoid people (decided 2026-11-25).
+Steps written 2026-11-26 for E4; the rest when the photos are in.
+
+- [x] H1 `[CV]` feat(perception): CenterNet-style box targets and decoding
+  (`minifsd.perception.centernet`): per-class Gaussian heatmaps, box size and
+  centre offset on a stride-7 grid; decoding by 3x3 max-pool peaks. Test: a box
+  encoded and decoded comes back within a pixel (property); the heatmap peaks at
+  1 on each box's centre cell; two classes on one spot both decode.
+- [x] H2 `[CV]` feat(train): E4 losses: focal loss on heatmaps with a per-class
+  mask (COCO images leave door and sign out, so their doors aren't learned as
+  background), L1 on size and offset, cross-entropy on floor, scale-invariant
+  log loss on depth (Eigen et al.). Test: each loss is 0 (or its floor) for a
+  perfect prediction; the depth loss ignores a global scale (property); masked
+  classes add nothing.
+- [ ] H3 `[CV]` feat(perception): `HydraNet` on frozen DINOv2-S: the E2b floor
+  probe, a two-layer depth decoder and the CenterNet head, all on one forward
+  pass; save and load like `DinoFloor`. Test: output shapes; backbone frozen; a
+  reloaded model gives the same outputs.
+- [ ] H4 `[CV]` feat(train): `minifsd.train.hydra`, joint training on v10
+  (floor, depth, boxes) plus COCO people (boxes only), with resume. Test: a CPU
+  smoke run on generated frames writes a checkpoint and resumes; the loss falls;
+  COCO samples add no floor or depth loss.
+- [ ] H5 `[CV]` feat(eval): harness candidates `hydra-floor`, `hydra-detect`,
+  `hydra-depth`, plus `hydra-all` (all heads, one forward, timed) for E4's
+  latency question. Test: each returns its task's output; the shared forward
+  runs once per image.
+- [ ] E4 `[CV]` exp: train HydraNet-lite on Explorer; score each head on its
+  task's sets; compare against the specialists (E1, E2, E3 winners) on accuracy
+  and on summed against shared latency.
 
 ## M5 Edge and safety
 
