@@ -287,6 +287,23 @@ real-photo steps (P1 to P5) wait for the photos, which are not taken yet.
   reproducible from a seed; the obstacle names are checked against the real
   file.
 
+- [x] D11 `[CV]` feat(world): furniture with raised surfaces (added 2026-11-25
+  after E2a). SegFormer trained on v9 scores 0.99 on sim val but marks real
+  counters, desks, beds and sofas as floor on nyuv2-val (precision 0.42): v9 has
+  no tables, and its boxes are flat colours while its floors are textured.
+  Clutter gains kinds: tables (top on four legs, floor visible underneath) and
+  desks (top on two side panels) beside the solid boxes, which stand in for
+  counters, beds and sofas. Tops and boxes get textures from the floor's own
+  families (checker, tiles, carpet, plain), sometimes the floor's exact look, so
+  texture alone can't tell floor from furniture. The default stays plain boxes,
+  so v9 and the ROS world are unchanged. Test: default clutter is the same as
+  before (pinned); every kind appears and stays reachable; a table is a top and
+  four legs that label as one obstacle; tops use their surface's material;
+  furniture looks are drawn after every other look value.
+
+- [ ] D12 `[CV]` data: generate v10 with furniture, same split sizes and seeds
+  as v9. Test: the split check; box counts per class; harness sanity run.
+
 Real photos, once they are taken (protocol: docs/real-photo-protocol.md):
 
 - [ ] P1 `[CV]` feat(data): `minifsd.data.real` import check: count per floor
@@ -351,6 +368,9 @@ rule holds: 2 candidates per experiment.
   scoring. Weights are gated; if access hasn't come through, DINOv2 ViT-S/14
   (open) stands in and the report says so. This tests the design's hypothesis
   that foundation features cross the sim-to-real gap better.
+- [ ] E2c `[CV]` exp: the better of E2a and E2b retrained on v10 (D12), scored
+  on v9 val, v10 val and nyuv2-val, so the report shows what furniture in the
+  sim bought on real rooms.
 - [ ] E1a `[CV]` exp: YOLO26n fine-tuned on v9 train plus COCO people, scored by
   T1's mAP on v9 val and COCO people val, plus latency. Check the AGPL question
   (open follow-ups) before the weights go in the repo or the demo. Decide first
@@ -726,3 +746,17 @@ Add a row at the end of each session.
   on its last 4 blocks (6,146 trained weights), at 238 x 322 (17 x 23 patches).
   Rough M1 timing with 2 threads, untrained weights, plain PyTorch: DINOv2 72
   ms, SegFormer-B0 103 ms; the harness measures them properly.
+- **2026-11-25** E2a harness scores on the M1 (2 threads): v9 val IoU 0.993;
+  nyuv2-val IoU 0.367 (classical 0.333), precision 0.42, recall 0.74, so it
+  marks about twice the real floor. Overlays show the extra floor on counters,
+  desks, a bed, a sofa and a toilet. Latency p50 134 ms, p95 401 ms, against a
+  50 ms budget for the whole stack (E6 must close it). Led to D11, D12 and E2c.
+- **2026-11-25** D11 furniture: clutter kinds box, table and desk (`--furniture`
+  in datagen), three surfaces per plan from the floor's families, and in a
+  quarter of plans one surface is the floor's exact look. The surfaces are drawn
+  from a generator spawned off the look's, which leaves the look's own stream
+  alone, so every look sampled before D11 is unchanged (a first try that drew
+  from the same stream shifted every look after the first). That first try
+  turned up one look of 30 whose pale walls clip 5.8% of pixels to white, over
+  the D4 test's 5%: D4's lighting can clip slightly on rare draws. Left as is
+  and noted here.

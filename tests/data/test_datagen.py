@@ -540,3 +540,68 @@ def test_door_frames_vary_from_building_to_building() -> None:
     values = [max(c) for c in frames_]
     lo, hi = datagen.DOOR_FRAME_VALUE_RANGE
     assert all(lo - 1e-9 <= v <= hi + 1e-9 for v in values)
+
+
+def test_furniture_looks_are_drawn_after_every_other_look_value() -> None:
+    # The first look from rng [7, 4] before D11: v9 plans keep their looks.
+    (look,) = datagen.sample_appearances(1, np.random.default_rng([7, 4]))
+    assert look.floor_kind == "plain"
+    assert look.floor_rgb == pytest.approx(
+        (0.288102081388753, 0.31841594054614714, 0.3220408346885878)
+    )
+    assert look.glass_share == pytest.approx(0.4774904858422023)
+    assert look.sign_font == "plain"
+    assert look.door_frame_rgb == pytest.approx(
+        (0.8396302587144793, 0.7776167049553362, 0.8555384090436312)
+    )
+    assert len(look.surfaces) == datagen.SURFACES_PER_PLAN
+
+
+def test_furniture_surfaces_come_from_the_floor_families() -> None:
+    looks = datagen.sample_appearances(600, np.random.default_rng(0))
+    surfaces = [s for a in looks for s in a.surfaces]
+    assert {s.kind for s in surfaces} == set(mjcf.FLOOR_KINDS)
+    low, high = datagen.FLOOR_PERIOD_RANGE_M
+    assert all(low <= s.period_m <= high for s in surfaces)
+    # Some plans have furniture that looks exactly like their floor, so
+    # texture alone can't separate the two.
+    same = np.mean(
+        [
+            any(
+                (s.kind, s.rgb, s.rgb2, s.period_m)
+                == (a.floor_kind, a.floor_rgb, a.floor_rgb2, a.floor_period_m)
+                for s in a.surfaces
+            )
+            for a in looks
+        ]
+    )
+    assert abs(same - datagen.FLOOR_LOOKALIKE_SHARE) < 0.06
+
+
+@pytest.mark.gl
+def test_furniture_flag_builds_tables_and_desks_into_the_split(
+    tmp_path: pathlib.Path,
+) -> None:
+    datagen.main(
+        [
+            "--split",
+            "val",
+            "--plans",
+            "2",
+            "--frames-per-plan",
+            "3",
+            "--clutter",
+            "10",
+            "--furniture",
+            "--out",
+            str(tmp_path),
+        ]
+    )
+    meta = [
+        json.loads(line)
+        for line in (tmp_path / "val" / "meta.jsonl").read_text().splitlines()
+    ]
+    assert len(meta) == 6
+    kinds = {k for m in meta for k in m["furniture"]}
+    assert kinds <= set(datagen.clutter_lib.FURNITURE_KINDS)
+    assert {"table", "desk"} & kinds

@@ -14,6 +14,7 @@ module constants, so a rename breaks the tests here, not inside ROS.
 """
 
 import dataclasses
+import math
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -89,6 +90,55 @@ PANEL_HALF_THICKNESS = 0.005
 
 RGB = tuple[float, float, float]
 
+# Furniture (D11). Tops are slabs, so floor shows under tables and desks.
+TOP_HALF_THICKNESS = 0.02
+LEG_HALF = 0.025  # square legs, 5 cm
+LEG_INSET = 0.05  # from the top's corner to the leg's centre
+SIDE_HALF_THICKNESS = 0.015  # desk side panels, 3 cm
+
+
+def _check_rgb(name: str, rgb: Sequence[float]) -> None:
+    if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
+        raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
+
+
+@dataclasses.dataclass(frozen=True)
+class Surface:
+    """A furniture surface texture, from the floor's own families (D11).
+
+    Attributes:
+        kind: One of FLOOR_KINDS.
+        rgb: Main colour.
+        rgb2: Second colour, as for the floor.
+        period_m: Metres per repeat of the pattern.
+    """
+
+    kind: str
+    rgb: RGB
+    rgb2: RGB
+    period_m: float
+
+    def __post_init__(self) -> None:
+        """Rejects a surface MuJoCo can't draw.
+
+        Raises:
+            ValueError: For an unknown kind, a colour outside [0, 1] or a
+                period that isn't positive.
+        """
+        if self.kind not in FLOOR_KINDS:
+            raise ValueError(
+                f"kind must be one of {FLOOR_KINDS}, got {self.kind!r}"
+            )
+        _check_rgb("rgb", self.rgb)
+        _check_rgb("rgb2", self.rgb2)
+        if self.period_m <= 0:
+            raise ValueError(f"period_m must be positive, got {self.period_m}")
+
+
+def furniture_material(index: int) -> str:
+    """The MuJoCo material name of the look's index-th surface."""
+    return f"furniture_mat_{index}"
+
 
 @dataclasses.dataclass(frozen=True)
 class Appearance:
@@ -120,6 +170,8 @@ class Appearance:
         sign_font: A font name from signs.FONTS.
         sign_word: A word from signs.WORDS above the number, or "" for none.
         door_frame_rgb: Colour of the door frames (D8).
+        surfaces: Furniture surfaces (D11); a clutter piece names one by
+            index. Empty by default: plain coloured boxes.
     """
 
     floor_kind: str = "checker"
@@ -138,6 +190,7 @@ class Appearance:
     sign_font: str = "simplex"
     sign_word: str = ""
     door_frame_rgb: RGB = (0.45, 0.35, 0.25)  # wood
+    surfaces: tuple[Surface, ...] = ()
 
     def __post_init__(self) -> None:
         """Rejects looks MuJoCo can't draw.
@@ -170,9 +223,7 @@ class Appearance:
             "sign_text_rgb",
             "door_frame_rgb",
         ):
-            rgb = getattr(self, name)
-            if len(rgb) != 3 or not all(0.0 <= c <= 1.0 for c in rgb):
-                raise ValueError(f"{name} needs 3 values in [0, 1], got {rgb}")
+            _check_rgb(name, getattr(self, name))
         for name in ("ambient", "main_light", "side_light"):
             value = getattr(self, name)
             if not 0.0 <= value <= 1.0:
@@ -369,18 +420,7 @@ def build_mjcf(
         _add_door(world, plan, room, appearance)
 
     for i, box in enumerate(clutter):
-        # MuJoCo quaternions are (w, x, y, z); ours are ROS order (x, y, z, w).
-        q = frames.yaw_to_quaternion(box.yaw)
-        ET.SubElement(
-            world,
-            "geom",
-            name=f"clutter_{i}",
-            type="box",
-            size=_fmt(box.half_x, box.half_y, box.height / 2),
-            pos=_fmt(box.x, box.y, box.height / 2),
-            quat=_fmt(q.w, q.x, q.y, q.z),
-            rgba=_fmt(*box.rgba),
-        )
+        _add_clutter(world, i, box, len(appearance.surfaces))
 
     _add_robot(world)
 
@@ -520,21 +560,29 @@ def _glass_walls(plan: floor_plan.FloorPlan, share: float) -> set[int]:
     return {int(i) for i in rng.permutation(fronts)[:count]}
 
 
-def _add_floor_texture(asset: ET.Element, look: Appearance) -> None:
-    """Adds the floor's texture and material for the look's floor kind."""
-    first, second = _fmt(*look.floor_rgb), _fmt(*look.floor_rgb2)
+def _add_texture(
+    asset: ET.Element,
+    texture: str,
+    material: str,
+    kind: str,
+    first_rgb: RGB,
+    second_rgb: RGB,
+    period_m: float,
+) -> None:
+    """Adds a texture and its material for one pattern."""
+    first, second = _fmt(*first_rgb), _fmt(*second_rgb)
     tex = {
-        "name": FLOOR_TEXTURE,
+        "name": texture,
         "type": "2d",
         "width": str(TEXTURE_SIZE),
         "height": str(TEXTURE_SIZE),
     }
-    if look.floor_kind == "checker":
+    if kind == "checker":
         tex.update(builtin="checker", rgb1=first, rgb2=second)
-    elif look.floor_kind == "tiles":
+    elif kind == "tiles":
         # "edge" marks the texture's border, so each repeat is one tile.
         tex.update(builtin="flat", rgb1=first, mark="edge", markrgb=second)
-    elif look.floor_kind == "carpet":
+    elif kind == "carpet":
         tex.update(
             builtin="flat",
             rgb1=first,
@@ -545,17 +593,126 @@ def _add_floor_texture(asset: ET.Element, look: Appearance) -> None:
     else:  # plain
         tex.update(builtin="flat", rgb1=first)
     ET.SubElement(asset, "texture", tex)
-    # texuniform: texrepeat counts repeats per metre, not per floor, so a
-    # tile keeps its size whatever the size of the building.
-    repeats = 1.0 / look.floor_period_m
+    # texuniform: texrepeat counts repeats per metre, not per geom, so a
+    # tile keeps its size whatever the size of the floor or table.
+    repeats = 1.0 / period_m
     ET.SubElement(
         asset,
         "material",
-        name=FLOOR_MATERIAL,
-        texture=FLOOR_TEXTURE,
+        name=material,
+        texture=texture,
         texrepeat=_fmt(repeats, repeats),
         texuniform="true",
     )
+
+
+def _add_floor_texture(asset: ET.Element, look: Appearance) -> None:
+    """Adds the floor's texture and material for the look's floor kind."""
+    _add_texture(
+        asset,
+        FLOOR_TEXTURE,
+        FLOOR_MATERIAL,
+        look.floor_kind,
+        look.floor_rgb,
+        look.floor_rgb2,
+        look.floor_period_m,
+    )
+    for i, s in enumerate(look.surfaces):
+        _add_texture(
+            asset,
+            f"furniture_tex_{i}",
+            furniture_material(i),
+            s.kind,
+            s.rgb,
+            s.rgb2,
+            s.period_m,
+        )
+
+
+def clutter_geoms(index: int, box: "clutter_lib.Box") -> tuple[str, ...]:
+    """The geom names of clutter piece index, top first for furniture."""
+    name = f"clutter_{index}"
+    if box.kind == "table":
+        return (f"{name}_top", *(f"{name}_leg_{k}" for k in range(4)))
+    if box.kind == "desk":
+        return (f"{name}_top", f"{name}_side_0", f"{name}_side_1")
+    return (name,)
+
+
+def _add_clutter(
+    world: ET.Element, index: int, box: "clutter_lib.Box", n_surfaces: int
+) -> None:
+    """Adds one clutter piece; every part is solid, like the old boxes."""
+    if box.surface >= n_surfaces:
+        raise ValueError(
+            f"clutter {index} wants surface {box.surface}, "
+            f"the look has {n_surfaces}"
+        )
+    # MuJoCo quaternions are (w, x, y, z); ours are ROS order (x, y, z, w).
+    q = frames.yaw_to_quaternion(box.yaw)
+    quat = _fmt(q.w, q.x, q.y, q.z)
+    c, s = math.cos(box.yaw), math.sin(box.yaw)
+    surface = (
+        {"material": furniture_material(box.surface)}
+        if box.surface >= 0
+        else {"rgba": _fmt(*box.rgba)}
+    )
+    names = clutter_geoms(index, box)
+
+    def part(
+        name: str,
+        local: tuple[float, float],
+        half: tuple[float, float, float],
+        z: float,
+        look: dict[str, str],
+    ) -> None:
+        lx, ly = local  # offset in the piece's own frame
+        ET.SubElement(
+            world,
+            "geom",
+            {
+                "name": name,
+                "type": "box",
+                "size": _fmt(*half),
+                "pos": _fmt(
+                    box.x + c * lx - s * ly, box.y + s * lx + c * ly, z
+                ),
+                "quat": quat,
+                **look,
+            },
+        )
+
+    if box.kind == "box":
+        half = (box.half_x, box.half_y, box.height / 2)
+        part(names[0], (0.0, 0.0), half, box.height / 2, surface)
+        return
+    top_z = box.height - TOP_HALF_THICKNESS
+    part(
+        names[0],
+        (0.0, 0.0),
+        (box.half_x, box.half_y, TOP_HALF_THICKNESS),
+        top_z,
+        surface,
+    )
+    under = box.height - 2 * TOP_HALF_THICKNESS  # from floor to the top
+    plain = {"rgba": _fmt(*box.rgba)}
+    if box.kind == "table":
+        ox, oy = box.half_x - LEG_INSET, box.half_y - LEG_INSET
+        corners = ((-ox, -oy), (ox, -oy), (-ox, oy), (ox, oy))
+        for name, corner in zip(names[1:], corners, strict=True):
+            part(
+                name, corner, (LEG_HALF, LEG_HALF, under / 2), under / 2, plain
+            )
+    else:  # desk: panels at the two ends of its x axis, full depth
+        ox = box.half_x - SIDE_HALF_THICKNESS
+        for name, sign in zip(names[1:], (-1, 1), strict=True):
+            part(
+                name,
+                (sign * ox, 0.0),
+                (SIDE_HALF_THICKNESS, box.half_y, under / 2),
+                under / 2,
+                plain,
+            )
 
 
 def _add_robot(world: ET.Element) -> None:

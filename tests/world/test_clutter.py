@@ -91,3 +91,79 @@ def test_contains_handles_rotation() -> None:
     assert clutter.contains(box, 0.0, 0.9)
     assert not clutter.contains(box, 0.9, 0.0)
     assert clutter.contains(box, 0.3, 0.0, grow=0.15)
+
+
+# generate_clutter(plan 3, 3 rooms a side, 6 boxes, rng [3, 2]) before D11,
+# rounded to 6 places: plain boxes must stay exactly what v9 and the ROS
+# world were built with.
+BEFORE_D11 = [
+    (2.725, 3.925, 1.528746, 0.516049, 0.206806, 0.300079),
+    (9.375, 3.125, -0.261804, 0.293147, 0.163519, 0.428279),
+    (8.125, -3.475, 2.95597, 0.28018, 0.406519, 0.836867),
+    (2.425, 2.125, -1.518987, 0.317938, 0.510902, 0.30653),
+    (1.975, -2.725, 1.015912, 0.328784, 0.366831, 0.523144),
+    (4.275, 2.375, -0.615059, 0.396716, 0.406704, 0.828412),
+]
+
+
+def test_default_clutter_is_what_it_was_before_furniture() -> None:
+    plan = floor_plan.generate_floor_plan(3, rooms_per_side=3)
+    boxes = clutter.generate_clutter(plan, 6, np.random.default_rng([3, 2]))
+    got = [
+        tuple(
+            round(v, 6) for v in (b.x, b.y, b.yaw, b.half_x, b.half_y, b.height)
+        )
+        for b in boxes
+    ]
+    assert got == BEFORE_D11
+    assert all(b.kind == "box" and b.surface == -1 for b in boxes)
+
+
+@settings(max_examples=25, deadline=None)
+@given(
+    st.integers(min_value=0, max_value=2**32 - 1),
+    st.integers(min_value=1, max_value=5),
+)
+def test_furniture_stays_in_range_and_never_cuts_off_a_room(
+    seed: int, rooms: int
+) -> None:
+    plan = floor_plan.generate_floor_plan(seed, rooms_per_side=rooms)
+    boxes = clutter.generate_clutter(
+        plan,
+        10,
+        np.random.default_rng(seed),
+        kinds=clutter.FURNITURE_KINDS,
+        surfaces=3,
+    )
+    assert clutter.reachable(plan, boxes)
+    for b in boxes:
+        assert b.kind in clutter.FURNITURE_KINDS
+        assert 0 <= b.surface < 3
+        low, high = clutter.HEIGHTS[b.kind]
+        assert low <= b.height <= high
+        low, high = clutter.HALVES[b.kind]
+        assert low <= b.half_x <= high and low <= b.half_y <= high
+
+
+def test_every_furniture_kind_turns_up() -> None:
+    kinds = {
+        b.kind
+        for seed in range(5)
+        for b in clutter.generate_clutter(
+            PLAN,
+            10,
+            np.random.default_rng(seed),
+            kinds=clutter.FURNITURE_KINDS,
+            surfaces=2,
+        )
+    }
+    assert kinds == set(clutter.FURNITURE_KINDS)
+
+
+def test_unknown_furniture_is_refused() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        clutter.generate_clutter(
+            PLAN, 3, np.random.default_rng(0), kinds=("sofa",)
+        )

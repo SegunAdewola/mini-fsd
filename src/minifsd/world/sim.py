@@ -284,9 +284,10 @@ class Sim:
         "room_sign".
         """
         objects = {}
-        for i in range(len(self.clutter)):
-            g = self.model.geom(f"clutter_{i}").id
-            objects[g] = ("obstacle", f"clutter_{i}")
+        for i, piece in enumerate(self.clutter):
+            for name in mjcf.clutter_geoms(i, piece):  # a table's legs too
+                g = self.model.geom(name).id
+                objects[g] = ("obstacle", f"clutter_{i}")
         for room in self.plan.rooms:
             sign = self.model.geom(f"sign_{room.number}").id
             objects[sign] = ("room_sign", f"sign_{room.number}")

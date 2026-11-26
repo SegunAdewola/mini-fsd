@@ -423,3 +423,112 @@ def test_glass_is_in_its_own_group_so_labels_can_see_through_it() -> None:
         group = model.geom(f"wall_{i}").group[0]
         assert group == (mjcf.GLASS_GROUP if i in fronts else 0)
     assert mjcf.GLASS_GROUP <= 2  # drawn by default, unlike the panels
+
+
+# D11: furniture. Two surfaces, so a test can tell which one a top took.
+SURFACES = (
+    mjcf.Surface("tiles", (0.7, 0.5, 0.3), (0.2, 0.2, 0.2), 0.4),
+    mjcf.Surface("carpet", (0.3, 0.3, 0.6), (0.9, 0.9, 0.9), 1.0),
+)
+FURNISHED = dataclasses.replace(mjcf.DEFAULT_APPEARANCE, surfaces=SURFACES)
+
+
+def _furnished(*pieces: object) -> mujoco.MjModel:
+    return mujoco.MjModel.from_xml_string(
+        mjcf.build_mjcf(PLAN, pieces, FURNISHED)  # type: ignore[arg-type]
+    )
+
+
+def _span_z(model: mujoco.MjModel, name: str) -> tuple[float, float]:
+    geom = model.geom(name)
+    return geom.pos[2] - geom.size[2], geom.pos[2] + geom.size[2]
+
+
+def test_a_table_is_a_top_on_four_legs_that_reach_the_floor() -> None:
+    from minifsd.world import clutter
+
+    table = clutter.Box(
+        3.0, 0.2, 0.0, 0.6, 0.4, 0.75, (0.1, 0.1, 0.1, 1.0), "table", 1
+    )
+    model = _furnished(table)
+    names = mjcf.clutter_geoms(0, table)
+    assert len(names) == 5
+    top, *legs = names
+    low, high = _span_z(model, top)
+    assert high == pytest.approx(0.75)
+    assert high - low < 0.1  # a slab, not a block: floor shows beneath
+    for leg in legs:
+        bottom, up = _span_z(model, leg)
+        assert bottom == pytest.approx(0.0) and up == pytest.approx(low)
+    assert model.geom(top).matid[0] == model.material("furniture_mat_1").id
+    assert all(model.geom(leg).matid[0] == -1 for leg in legs)
+
+
+def test_a_desk_is_a_top_on_two_side_panels() -> None:
+    from minifsd.world import clutter
+
+    desk = clutter.Box(
+        3.0, 0.2, 0.0, 0.7, 0.35, 0.74, (0.1, 0.1, 0.1, 1.0), "desk", 0
+    )
+    model = _furnished(desk)
+    top, *sides = mjcf.clutter_geoms(0, desk)
+    assert len(sides) == 2
+    assert _span_z(model, top)[1] == pytest.approx(0.74)
+    # The panels stand at the two short ends, full depth.
+    xs = sorted(model.geom(s).pos[0] for s in sides)
+    assert xs[0] < 3.0 - 0.6 and xs[1] > 3.0 + 0.6
+    for s in sides:
+        assert model.geom(s).size[1] == pytest.approx(0.35)
+
+
+def test_a_box_with_a_surface_takes_its_material_and_a_plain_one_none() -> None:
+    from minifsd.world import clutter
+
+    rgba = (0.1, 0.1, 0.1, 1.0)
+    textured = clutter.Box(3.0, 0.2, 0.0, 0.3, 0.3, 0.5, rgba, "box", 0)
+    plain = clutter.Box(5.0, 0.2, 0.0, 0.3, 0.3, 0.5, rgba)
+    model = _furnished(textured, plain)
+    assert (
+        model.geom("clutter_0").matid[0] == model.material("furniture_mat_0").id
+    )
+    assert model.geom("clutter_1").matid[0] == -1
+
+
+def test_every_furniture_geom_is_solid() -> None:
+    from minifsd.world import clutter
+
+    table = clutter.Box(
+        3.0, 0.2, 0.0, 0.6, 0.4, 0.75, (0.1, 0.1, 0.1, 1.0), "table", 1
+    )
+    model = _furnished(table)
+    for name in mjcf.clutter_geoms(0, table):
+        geom = model.geom(name)
+        assert geom.contype[0] == 1 and geom.conaffinity[0] == 1
+
+
+def test_a_piece_needs_a_surface_the_look_has() -> None:
+    from minifsd.world import clutter
+
+    box = clutter.Box(3.0, 0.2, 0.0, 0.3, 0.3, 0.5, (0, 0, 0, 1), "box", 2)
+    with pytest.raises(ValueError):
+        mjcf.build_mjcf(PLAN, (box,), FURNISHED)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"kind": "marble"},
+        {"rgb": (1.2, 0.5, 0.5)},
+        {"rgb2": (0.5, -0.1, 0.5)},
+        {"period_m": 0.0},
+    ],
+)
+def test_rejects_a_surface_mujoco_cannot_draw(bad: dict[str, object]) -> None:
+    good = {
+        "kind": "tiles",
+        "rgb": (0.5, 0.5, 0.5),
+        "rgb2": (0.2, 0.2, 0.2),
+        "period_m": 0.5,
+    }
+    with pytest.raises(ValueError):
+        mjcf.Surface(**{**good, **bad})  # type: ignore[arg-type]

@@ -8,6 +8,13 @@ Placement keeps the floor usable: boxes don't overlap walls, stay clear of
 the spawn point, and never cut a room off. After each box, a grid search
 checks that every room's goal can still be reached from spawn by a robot
 needing CLEARANCE metres on each side.
+
+Kinds (D11): by default every piece is a solid box, as before. The data
+engine also asks for tables (a top on four legs) and desks (a top on two
+side panels), whose tops are flat surfaces above the floor with floor
+visible underneath, the case SegFormer got wrong on real rooms (E2a). Boxes
+stand in for counters, beds and sofas. A piece's footprint is always an
+obstacle, so the robot never plans under a table.
 """
 
 import dataclasses
@@ -28,6 +35,19 @@ SPAWN_CLEARANCE = 1.0  # free radius around the spawn point
 # Gaps narrower than 2 x 0.35 m count as blocked.
 CLEARANCE = mjcf.ROBOT_RADIUS + 0.15
 TRIES_PER_BOX = 40
+
+FURNITURE_KINDS = ("box", "table", "desk")
+# Height and half-length ranges per kind, in metres.
+HEIGHTS = {
+    "box": (MIN_HEIGHT, MAX_HEIGHT),
+    "table": (0.7, 1.05),  # dining and meeting tables up to bar height
+    "desk": (0.72, 0.78),
+}
+HALVES = {
+    "box": (MIN_HALF, MAX_HALF),
+    "table": (0.3, 0.9),
+    "desk": (0.3, 0.8),
+}
 
 # Muted furniture colours: wood, grey, dark blue, beige, black, green.
 PALETTE = (
@@ -50,7 +70,9 @@ class Box:
     half_x: float  # half-lengths along the box's own x and y axes
     half_y: float
     height: float
-    rgba: tuple[float, float, float, float]
+    rgba: tuple[float, float, float, float]  # body, or legs and sides
+    kind: str = "box"  # one of FURNITURE_KINDS
+    surface: int = -1  # index of the look's furniture surface; -1: rgba
 
 
 def _local(
@@ -136,7 +158,11 @@ def reachable(plan: floor_plan.FloorPlan, boxes: Sequence[Box]) -> bool:
 
 
 def generate_clutter(
-    plan: floor_plan.FloorPlan, n: int, rng: np.random.Generator
+    plan: floor_plan.FloorPlan,
+    n: int,
+    rng: np.random.Generator,
+    kinds: Sequence[str] = ("box",),
+    surfaces: int = 0,
 ) -> tuple[Box, ...]:
     """Places up to n boxes, never cutting a room off.
 
@@ -144,11 +170,21 @@ def generate_clutter(
         plan: The floor plan.
         n: How many boxes to try for.
         rng: The random source; the same state gives the same boxes.
+        kinds: Kinds to draw from, each from FURNITURE_KINDS. With the
+            default plain boxes and no surfaces, nothing extra is drawn,
+            so the boxes are the same as before D11.
+        surfaces: How many furniture surfaces the look has
+            (mjcf.Appearance.surfaces); each piece takes one at random.
+            0 keeps the plain rgba.
 
     Returns:
         The boxes placed. Fewer than n only if a floor is too cramped to
         fit them within TRIES_PER_BOX tries each.
     """
+    unknown = set(kinds) - set(FURNITURE_KINDS)
+    if unknown or not kinds:
+        raise ValueError(f"kinds must come from {FURNITURE_KINDS}: {kinds}")
+    plain = tuple(kinds) == ("box",) and surfaces == 0
     floor = _Floor.of(plan)
     walls = floor.grid.occupied
     rows, cols = np.nonzero(floor.inside)
@@ -166,6 +202,18 @@ def generate_clutter(
             height=float(rng.uniform(MIN_HEIGHT, MAX_HEIGHT)),
             rgba=PALETTE[int(rng.integers(len(PALETTE)))],
         )
+        if not plain:
+            # Drawn after the old values, so plain boxes are unchanged.
+            kind = str(rng.choice(list(kinds)))
+            low, high = HALVES[kind]
+            box = dataclasses.replace(
+                box,
+                half_x=float(rng.uniform(low, high)),
+                half_y=float(rng.uniform(low, high)),
+                height=float(rng.uniform(*HEIGHTS[kind])),
+                kind=kind,
+                surface=int(rng.integers(surfaces)) if surfaces else -1,
+            )
         footprint = covers(box, floor.xs, floor.ys, 0.0)
         if (footprint & walls).any() or (footprint & ~floor.inside).any():
             continue

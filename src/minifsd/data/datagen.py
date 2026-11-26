@@ -98,6 +98,12 @@ DARK_TEXT_VALUE = (0.0, 0.2)
 LIGHT_TEXT_VALUE = (0.9, 1.0)
 # D8 door frames per building: dark wood to pale paint or metal.
 DOOR_FRAME_VALUE_RANGE = (0.15, 0.9)
+# Furniture (D11): surfaces drawn from the floor's own families, so a table
+# top can't be told from the floor by its texture alone. In this share of
+# plans the first surface is the floor's exact look (a wooden table on a
+# wooden floor).
+SURFACES_PER_PLAN = 3
+FLOOR_LOOKALIKE_SHARE = 0.25
 # Each split's seeds start here. Splits can hold up to SPLIT_SIZE plans.
 SPLIT_SIZE = 1_000_000
 _SPLIT_START = {name: i * SPLIT_SIZE for i, name in enumerate(SPLITS)}
@@ -117,6 +123,7 @@ class Frame:
     appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE
     effects: camera_effects.Effects = camera_effects.Effects()
     boxes: tuple[boxes_lib.Box2D, ...] = ()
+    furniture: tuple[str, ...] = ()  # kinds of the plan's clutter (D11)
 
 
 def with_effects(
@@ -316,7 +323,24 @@ def sample_appearances(
         side_light = float(rng.uniform(*SIDE_LIGHT_RANGE))
         # Drawn last, so the D3 to D4 values above are unchanged.
         sign_rgb, sign_text_rgb, sign_font, sign_word = _sign_style(rng, wild)
-        door_frame = _colour(rng, False, DOOR_FRAME_VALUE_RANGE)  # D8, last
+        door_frame = _colour(rng, False, DOOR_FRAME_VALUE_RANGE)  # D8
+        # D11: from a spawned child generator, which doesn't advance rng,
+        # so every look this function gave before D11 comes out the same.
+        (sub,) = rng.spawn(1)
+        lookalike = bool(sub.random() < FLOOR_LOOKALIKE_SHARE)
+        surfaces = []
+        for _ in range(SURFACES_PER_PLAN):
+            rgb = _colour(sub, wild, FLOOR_VALUE_RANGE)
+            surfaces.append(
+                mjcf.Surface(
+                    kind=str(sub.choice(mjcf.FLOOR_KINDS)),
+                    rgb=rgb,
+                    rgb2=_shade(sub, rgb),
+                    period_m=float(sub.uniform(*FLOOR_PERIOD_RANGE_M)),
+                )
+            )
+        if lookalike:
+            surfaces[0] = mjcf.Surface(kind, floor_rgb, floor_rgb2, period)
         looks.append(
             mjcf.Appearance(
                 floor_kind=kind,
@@ -335,6 +359,7 @@ def sample_appearances(
                 sign_font=sign_font,
                 sign_word=sign_word,
                 door_frame_rgb=door_frame,
+                surfaces=tuple(surfaces),
             )
         )
     return looks
@@ -459,6 +484,7 @@ def render_frames(
                 camera=cam,
                 appearance=appearance,
                 boxes=_boxes(s, objects, doors),
+                furniture=tuple(piece.kind for piece in clutter),
             )
     finally:
         s.close()
@@ -516,6 +542,7 @@ def write_frame(frame: Frame, out_dir: pathlib.Path) -> None:
         "appearance": dataclasses.asdict(frame.appearance),
         "effects": dataclasses.asdict(frame.effects),
         "boxes": [dataclasses.asdict(b) for b in frame.boxes],
+        "furniture": list(frame.furniture),
     }
     with (out_dir / "meta.jsonl").open("a") as f:
         f.write(json.dumps(meta) + "\n")
@@ -602,6 +629,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--clutter", type=int, default=6, help="boxes per floor plan"
     )
+    parser.add_argument(
+        "--furniture",
+        action="store_true",
+        help="tables, desks and textured boxes (D11) instead of plain boxes",
+    )
     parser.add_argument("--out", default="data/sim/v7", type=pathlib.Path)
     args = parser.parse_args(argv)
 
@@ -614,7 +646,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         rooms = int(np.random.default_rng([seed, 0]).integers(2, 7))
         plan = floor_plan.generate_floor_plan(seed, rooms_per_side=rooms)
         boxes = clutter_lib.generate_clutter(
-            plan, args.clutter, np.random.default_rng([seed, 2])
+            plan,
+            args.clutter,
+            np.random.default_rng([seed, 2]),
+            kinds=clutter_lib.FURNITURE_KINDS if args.furniture else ("box",),
+            surfaces=SURFACES_PER_PLAN if args.furniture else 0,
         )
         # Cameras first: how much open space a pose needs depends on them.
         cameras = sample_cameras(

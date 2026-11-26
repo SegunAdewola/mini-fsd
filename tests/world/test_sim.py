@@ -5,6 +5,7 @@ and the ROS node will. Tolerances allow for the actuators' 0.05 s time
 constant: a 0.5 m/s command covers about 0.475 m in its first second.
 """
 
+import dataclasses
 import math
 
 import numpy as np
@@ -415,3 +416,20 @@ def test_door_panels_show_only_in_label_renders(s: sim.Sim) -> None:
     assert not (s.render_segmentation() == panel).any()
     with_panels = s.render_segmentation(groups=sim.DOOR_LABEL_GROUPS)
     assert (with_panels == panel).mean() > 0.1
+
+
+def test_every_part_of_a_table_labels_as_one_obstacle() -> None:
+    from minifsd.world import clutter
+
+    look = dataclasses.replace(
+        mjcf.DEFAULT_APPEARANCE,
+        surfaces=(mjcf.Surface("plain", (0.5, 0.4, 0.3), (0, 0, 0), 1.0),),
+    )
+    table = clutter.Box(
+        2.0, 0.0, 0.0, 0.6, 0.4, 0.75, (0.1, 0.1, 0.1, 1.0), "table", 0
+    )
+    s = sim.Sim(PLAN, clutter=(table,), appearance=look)
+    objects = s.labelled_objects()
+    parts = {s.model.geom(n).id for n in mjcf.clutter_geoms(0, table)}
+    assert len(parts) == 5
+    assert all(objects[g] == ("obstacle", "clutter_0") for g in parts)
