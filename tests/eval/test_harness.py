@@ -273,3 +273,19 @@ def test_nyuv2_train_and_test_are_the_official_splits() -> None:
         )
     with pytest.raises(ValueError):
         harness.nyuv2_indices("nyuv2-other", NYU_SPLITS)
+
+
+def test_the_dino_candidate_loads_a_checkpoint_and_masks_floor(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # E2b: a run's best/ folder, copied to DINO_DIR, scored as "floor".
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.train import dino
+
+    dino.build_model(None).save(tmp_path / "dino")
+    monkeypatch.setattr(harness, "DINO_DIR", tmp_path / "dino")
+    c = harness.make_candidate("floor-dinov2-s", device="cpu", threads=1)
+    assert (c.name, c.task) == ("floor-dinov2-s", "floor")
+    mask = c.predict(np.zeros((240, 320, 3), np.uint8))
+    assert mask.shape == (240, 320) and mask.dtype == bool

@@ -713,3 +713,16 @@ Add a row at the end of each session.
   test stays clean. E3b must leave them out of its training data. Classical
   floor baseline on it: IoU 0.333 (0.512 on images with floor in the bottom
   strip), 3.3 ms p50 on the M1 with 2 threads.
+- **2026-11-25** E2a trained on Colab (T4): 20 epochs of v9 train, about 75 s
+  each. Val floor IoU 0.977 after epoch 0, best 0.9928 at epoch 17, flat after,
+  so no overfitting on sim. Sim val is the same renderer, so this says little
+  about real photos; nyuv2-val and real floor 15 decide. Harness scores to
+  follow on the M1.
+- **2026-11-25** E2b code: the E2a loop moved into `minifsd.train.floor`, and
+  each model gives a recipe (build, trained weights, preprocessing, save).
+  SegFormer's loss is now computed by the loop, with the same maths as
+  transformers' (bilinear upsampling, then cross-entropy). DINOv2 ViT-S/14
+  stands in for the gated DINOv3: frozen, with the DINOv2 paper's linear probe
+  on its last 4 blocks (6,146 trained weights), at 238 x 322 (17 x 23 patches).
+  Rough M1 timing with 2 threads, untrained weights, plain PyTorch: DINOv2 72
+  ms, SegFormer-B0 103 ms; the harness measures them properly.

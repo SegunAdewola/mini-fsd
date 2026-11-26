@@ -18,7 +18,9 @@ mini-fsd/
 │   │   └── camera.py            # Pinhole, calibration, floor mapping (V4)
 │   ├── perception/
 │   │   ├── floor_classical.py   # Classical floor baseline (V3)
-│   │   └── depth_zero_shot.py   # Depth Anything wrapper (V5)
+│   │   ├── depth_anything.py    # Depth Anything V2 wrapper (V5)
+│   │   ├── floor_segformer.py   # SegFormer-B0 floor model (E2a)
+│   │   └── floor_dino.py        # Frozen DINOv2 + floor head (E2b)
 │   ├── eval/
 │   │   ├── metrics.py           # IoU, AbsRel, delta1 (V1)
 │   │   ├── detection.py         # mAP at IoU 0.5 (T1)
@@ -30,7 +32,11 @@ mini-fsd/
 │   │   ├── boxes.py             # Object boxes from renders, COCO files (D8)
 │   │   └── coco_people.py       # COCO person subset for detection (D10)
 │   ├── train/                   # Training on Colab (ADR 0007)
-│   │   └── pack.py              # Datasets zipped for Google Drive (T2)
+│   │   ├── pack.py              # Datasets zipped for Google Drive (T2)
+│   │   ├── adapters.py          # v9 + COCO to YOLO, RF-DETR, floor pairs (T3)
+│   │   ├── floor.py             # Shared floor training loop, resume (E2)
+│   │   ├── segformer.py         # E2a recipe
+│   │   └── dino.py              # E2b recipe
 │   ├── mission/
 │   │   └── goals.py             # "go to room 103" -> goal pose (R9)
 │   └── demo/                    # Dec 15: folder of images -> overlays (V8)
