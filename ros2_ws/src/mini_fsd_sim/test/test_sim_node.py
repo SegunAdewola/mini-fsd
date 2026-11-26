@@ -177,3 +177,27 @@ def test_clutter_parameter_puts_boxes_in_the_world() -> None:
         again.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+def test_people_parameter_puts_walkers_in_the_world_clear_of_boxes() -> None:
+    rclpy.init()
+    try:
+        node = sim_node.SimNode(
+            parameter_overrides=[
+                rclpy.parameter.Parameter("clutter", value=6),
+                rclpy.parameter.Parameter("people", value=2),
+            ]
+        )
+        # Boxes can crowd one lane out (seed 0's right half), so up to 2.
+        assert 1 <= len(node.walkers) <= 2
+        # Walkers draw from their own random stream, so asking for them
+        # leaves the boxes as they were.
+        boxes_only = sim_node.SimNode(
+            parameter_overrides=[rclpy.parameter.Parameter("clutter", value=6)]
+        )
+        assert node.clutter == boxes_only.clutter
+        assert boxes_only.walkers == ()
+        node.destroy_node()
+        boxes_only.destroy_node()
+    finally:
+        rclpy.shutdown()

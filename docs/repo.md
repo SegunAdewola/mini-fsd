@@ -12,7 +12,8 @@ mini-fsd/
 │   │   ├── sim.py               # MuJoCo wrapper: drive, watchdog, render (R3)
 │   │   ├── clutter.py           # Boxes on the floor as obstacles (V7)
 │   │   ├── signs.py             # Room numbers drawn on sign plates (D7)
-│   │   └── occupancy.py         # Layout -> Nav2 occupancy map (R7)
+│   │   ├── occupancy.py         # Layout -> Nav2 occupancy map (R7)
+│   │   └── people.py            # Walkers pacing the hallway (M4.7)
 │   ├── geometry/
 │   │   ├── frames.py            # Quaternions, optical frame, intrinsics (R4)
 │   │   ├── camera.py            # Pinhole model, checkerboard calibration (V4)

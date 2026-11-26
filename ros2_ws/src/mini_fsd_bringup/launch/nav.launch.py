@@ -1,9 +1,11 @@
 """Starts the simulator, Nav2 on the floor plan's map, and RViz.
 
-    ros2 launch mini_fsd_bringup nav.launch.py seed:=3 clutter:=6
+    ros2 launch mini_fsd_bringup nav.launch.py seed:=3 clutter:=6 people:=2
 
 clutter:=N puts N boxes in the world that are not on the map; the robot must
-see them with the camera to get around them.
+see them with the camera to get around them. people:=N (0 to 2) adds walkers
+pacing the hallway (M4.7). perception:=model runs the trained models on the
+camera image instead of reading the sim's exact depth (M4.6).
 
 Send a goal with RViz's "2D Goal Pose" tool, or by room number:
     ros2 topic pub --once /mission std_msgs/String "data: 'go to room 103'"
@@ -82,6 +84,7 @@ def generate_launch_description() -> launch.LaunchDescription:
     seed = launch.substitutions.LaunchConfiguration("seed")
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
     clutter = launch.substitutions.LaunchConfiguration("clutter")
+    people = launch.substitutions.LaunchConfiguration("people")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
     perception = launch.substitutions.LaunchConfiguration("perception")
 
@@ -93,6 +96,7 @@ def generate_launch_description() -> launch.LaunchDescription:
             "seed": seed,
             "rooms_per_side": rooms,
             "clutter": clutter,
+            "people": people,
             "rviz": rviz,
             "rviz_config": str(SHARE / "rviz" / "nav.rviz"),
         }.items(),
@@ -118,6 +122,7 @@ def generate_launch_description() -> launch.LaunchDescription:
             ),
             # Off the map on purpose: only the camera can see these (R10).
             launch.actions.DeclareLaunchArgument("clutter", default_value="6"),
+            launch.actions.DeclareLaunchArgument("people", default_value="0"),
             launch.actions.DeclareLaunchArgument("rviz", default_value="true"),
             # truth: the sim's exact depth (R10); model: the ONNX models
             # on the RGB image (M4.6).

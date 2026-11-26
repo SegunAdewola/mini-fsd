@@ -22,6 +22,7 @@ def generate_launch_description() -> launch.LaunchDescription:
     seed = launch.substitutions.LaunchConfiguration("seed")
     rooms = launch.substitutions.LaunchConfiguration("rooms_per_side")
     clutter = launch.substitutions.LaunchConfiguration("clutter")
+    people = launch.substitutions.LaunchConfiguration("people")
     rviz = launch.substitutions.LaunchConfiguration("rviz")
     rviz_config = launch.substitutions.LaunchConfiguration("rviz_config")
 
@@ -45,6 +46,11 @@ def generate_launch_description() -> launch.LaunchDescription:
                 description="Boxes in the world but not on the map",
             ),
             launch.actions.DeclareLaunchArgument(
+                "people",
+                default_value="0",
+                description="Walkers pacing the hallway, 0 to 2 (M4.7)",
+            ),
+            launch.actions.DeclareLaunchArgument(
                 "rviz", default_value="true", description="Start RViz"
             ),
             launch.actions.DeclareLaunchArgument(
@@ -63,6 +69,7 @@ def generate_launch_description() -> launch.LaunchDescription:
                         "seed": as_int(seed),
                         "rooms_per_side": as_int(rooms),
                         "clutter": as_int(clutter),
+                        "people": as_int(people),
                     }
                 ],
             ),

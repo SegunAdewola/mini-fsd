@@ -49,6 +49,10 @@ ROBOT_HALF_HEIGHT = 0.15
 # 3, so its own camera never sees it (D1: a camera tilted down at robot
 # height would). Physics ignores groups, so it still collides.
 ROBOT_GEOM_GROUP = 3
+# Walkers (M4.7): a capsule the size of a person.
+PERSON_RADIUS = 0.25  # shoulder width about 0.5 m
+PERSON_HEIGHT = 1.7
+PERSON_RGBA = (0.25, 0.3, 0.45, 1.0)  # dark clothes
 ROBOT_MASS = 10.0  # kg
 MAX_SPEED = 3.0  # m/s, also the actuator control range
 MAX_TURN = 3.0  # rad/s
@@ -256,6 +260,7 @@ def build_mjcf(
     plan: floor_plan.FloorPlan,
     clutter: Sequence["clutter_lib.Box"] = (),
     appearance: Appearance = DEFAULT_APPEARANCE,
+    people: Sequence[tuple[float, float]] = (),
 ) -> str:
     """Returns MJCF XML for the floor plan with the robot at its spawn.
 
@@ -265,6 +270,9 @@ def build_mjcf(
             collides with them) but are not part of the floor plan, so they
             stay off Nav2's map.
         appearance: Colours and floor pattern.
+        people: Starting (x, y) of each walker (minifsd.world.people).
+            Each is a mocap body named person_<i>: the sim moves it, and
+            the robot collides with it.
 
     Returns:
         The model as an XML string, ready for mujoco.MjModel.from_xml_string.
@@ -421,6 +429,9 @@ def build_mjcf(
 
     for i, box in enumerate(clutter):
         _add_clutter(world, i, box, len(appearance.surfaces))
+
+    for i, (x, y) in enumerate(people):
+        _add_person(world, i, x, y)
 
     _add_robot(world)
 
@@ -713,6 +724,31 @@ def _add_clutter(
                 under / 2,
                 plain,
             )
+
+
+def person_body(index: int) -> str:
+    """The mocap body name of walker `index`."""
+    return f"person_{index}"
+
+
+def _add_person(world: ET.Element, index: int, x: float, y: float) -> None:
+    """Adds one walker: a mocap body, so physics never moves it."""
+    body = ET.SubElement(
+        world,
+        "body",
+        name=person_body(index),
+        mocap="true",
+        pos=_fmt(x, y, PERSON_HEIGHT / 2),
+    )
+    ET.SubElement(
+        body,
+        "geom",
+        type="capsule",
+        # A capsule's size is its radius and the half-length of its
+        # straight part, so its full height is that plus both end caps.
+        size=_fmt(PERSON_RADIUS, PERSON_HEIGHT / 2 - PERSON_RADIUS),
+        rgba=_fmt(*PERSON_RGBA),
+    )
 
 
 def _add_robot(world: ET.Element) -> None:

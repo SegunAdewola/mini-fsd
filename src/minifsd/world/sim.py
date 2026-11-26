@@ -17,7 +17,7 @@ import numpy as np
 
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
-from minifsd.world import floor_plan, mjcf, signs
+from minifsd.world import floor_plan, mjcf, people, signs
 
 # Stop if no command arrives for this long. teleop and Nav2 both resend
 # commands at 10 Hz or more, so 0.3 s means 3 missed messages. With the
@@ -86,6 +86,7 @@ class Sim:
         watchdog_timeout: float = WATCHDOG_TIMEOUT,
         clutter: Sequence[clutter_lib.Box] = (),
         appearance: mjcf.Appearance = mjcf.DEFAULT_APPEARANCE,
+        walkers: Sequence[people.Walker] = (),
     ) -> None:
         """Builds the model and puts the robot at the plan's spawn pose.
 
@@ -94,12 +95,16 @@ class Sim:
             watchdog_timeout: Seconds without a command before stopping.
             clutter: Boxes in the world but not in the floor plan.
             appearance: Colours and floor pattern (D3).
+            walkers: People pacing the hallway (M4.7), moved on each step.
         """
         self.plan = plan
         self.clutter = tuple(clutter)
         self.appearance = appearance
+        self._crowd = people.Crowd(walkers)
         self.model = mujoco.MjModel.from_xml_string(
-            mjcf.build_mjcf(plan, self.clutter, appearance)
+            mjcf.build_mjcf(
+                plan, self.clutter, appearance, self._crowd.positions()
+            )
         )
         signs.paint(self.model, plan, appearance)  # before any renderer
         self.data = mujoco.MjData(self.model)
@@ -148,6 +153,7 @@ class Sim:
                 (2 ms each).
         """
         n = max(1, round(seconds / self.model.opt.timestep))
+        self._move_walkers(n * self.model.opt.timestep)
         for _ in range(n):
             stale = self.time - self._last_command_time > self._watchdog_timeout
             v, w = (0.0, 0.0) if stale else (self._v, self._w)
@@ -159,6 +165,20 @@ class Sim:
             ):
                 self.data.ctrl[ctrl] = value
             mujoco.mj_step(self.model, self.data)
+
+    def walker_positions(self) -> np.ndarray:
+        """(N, 3) each walker's centre in the world, as the sim has it."""
+        return np.array(self.data.mocap_pos, dtype=np.float64)
+
+    def _move_walkers(self, seconds: float) -> None:
+        # Once per step() call, not per physics step: walkers move at 1.2
+        # m/s at most, 6 cm in a 20 Hz tick.
+        if not self._crowd.walkers:
+            return
+        robot = self.pose()
+        self._crowd.advance(seconds, (robot.x, robot.y))
+        for i, (x, y) in enumerate(self._crowd.positions()):
+            self.data.mocap_pos[i] = (x, y, people.HEIGHT / 2)
 
     def set_pose(self, pose: floor_plan.Pose2D) -> None:
         """Puts the robot at a pose, at rest, without stepping physics.

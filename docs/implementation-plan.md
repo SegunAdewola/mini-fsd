@@ -535,7 +535,7 @@ scale and shift on the pixels the floor model marks.
   `truth`; in model mode it reads the RGB image, runs the pipeline, and also
   publishes the floor mask and boxes for RViz. Test: ROS smoke test, an image in
   gives a cloud out in both modes.
-- [ ] M4.7 `[R]` feat(world): moving person-sized obstacles in the sim. Test:
+- [x] M4.7 `[R]` feat(world): moving person-sized obstacles in the sim. Test:
   they move, stay on the floor and never enter a wall.
 - [ ] M4.8 `[R]` exp: closed loop, the same missions with true depth and with
   model perception; success, collisions and time per mission.
@@ -1105,3 +1105,14 @@ Add a row at the end of each session.
   (default `truth`, so R8 is unchanged), and RViz has a Perception panel. The
   fallback scale is the student's global fit on 300 v10 train frames, 1 / depth
   = 0.172 d + 0.543 (AbsRel 0.29 on v10 val used alone).
+- **2026-11-26** M4.7: walkers (`minifsd.world.people`), mocap capsules 0.5 m
+  wide and 1.7 m tall pacing a stretch of hallway at 0.5 to 1.2 m/s, one per
+  side of the centre line, clear of walls, boxes and the spawn. They yield: one
+  stands still while its next step would bring it within 0.55 m of the robot, so
+  a walker never walks into the robot, and any contact in M4.8 is the robot's
+  doing. `pixi run nav people:=2`. Boxes can crowd a lane out, so `people:=2`
+  may give one. Surprise: `pixi run nav perception:=model` never passed the
+  argument on. pixi appends it after the `bash -c` script, where bash takes it
+  as the script's name ($0), so M4.6's model mode never ran from the task and
+  RViz's Perception panel stayed empty. The tasks now end in `"$@"' nav`, and
+  `pixi run nav --show-args` proves the arguments get through.

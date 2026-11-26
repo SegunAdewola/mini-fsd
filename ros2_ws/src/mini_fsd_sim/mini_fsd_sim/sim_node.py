@@ -35,7 +35,7 @@ from std_msgs.msg import Header
 
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
-from minifsd.world import floor_plan, mjcf, sim
+from minifsd.world import floor_plan, mjcf, people, sim
 
 # Frame names (REP 105). Nav2, RViz and the bringup config use these.
 ODOM_FRAME = "odom"
@@ -82,6 +82,8 @@ class SimNode(rclpy.node.Node):
         rooms = self.declare_parameter("rooms_per_side", 4).value
         # Boxes in the world but not on Nav2's map (minifsd.world.clutter).
         n_clutter = self.declare_parameter("clutter", 0).value
+        # Walkers pacing the hallway, 0 to 2 (minifsd.world.people).
+        n_people = self.declare_parameter("people", 0).value
         rate_hz = self.declare_parameter("rate_hz", 20.0).value
         self._dt = 1.0 / rate_hz
 
@@ -90,7 +92,11 @@ class SimNode(rclpy.node.Node):
         self.clutter = clutter_lib.generate_clutter(
             plan, n_clutter, np.random.default_rng([seed, 2])
         )
-        self._sim = sim.Sim(plan, clutter=self.clutter)
+        # Their own random stream, so adding people leaves the boxes alone.
+        self.walkers = people.generate_walkers(
+            plan, np.random.default_rng([seed, 3]), n_people, self.clutter
+        )
+        self._sim = sim.Sim(plan, clutter=self.clutter, walkers=self.walkers)
         self._intrinsics = frames.intrinsics_from_fovy(
             mjcf.IMAGE_WIDTH, mjcf.IMAGE_HEIGHT, mjcf.FOVY_DEG
         )
@@ -117,7 +123,8 @@ class SimNode(rclpy.node.Node):
         self.create_timer(self._dt, self._tick)
         self.get_logger().info(
             f"floor plan seed {seed}, {rooms} rooms per side, "
-            f"{len(self.clutter)} clutter boxes, {rate_hz} Hz"
+            f"{len(self.clutter)} clutter boxes, {len(self.walkers)} people, "
+            f"{rate_hz} Hz"
         )
 
     def _on_cmd_vel(self, msg: Twist) -> None:
