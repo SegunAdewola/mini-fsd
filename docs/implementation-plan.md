@@ -438,7 +438,7 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
   log loss on depth (Eigen et al.). Test: each loss is 0 (or its floor) for a
   perfect prediction; the depth loss ignores a global scale (property); masked
   classes add nothing.
-- [ ] H3 `[CV]` feat(perception): `HydraNet` on frozen DINOv2-S: the E2b floor
+- [x] H3 `[CV]` feat(perception): `HydraNet` on frozen DINOv2-S: the E2b floor
   probe, a two-layer depth decoder and the CenterNet head, all on one forward
   pass; save and load like `DinoFloor`. Test: output shapes; backbone frozen; a
   reloaded model gives the same outputs.
