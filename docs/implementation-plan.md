@@ -135,12 +135,19 @@ end. Big integration problems show up now, not in December.
   with a known floor region gives IoU above 0.95; the mask is empty or contains
   the seed (property); nothing above the horizon (property). Tune on NYUv2
   train, report floor IoU on NYUv2 test once.
-- [ ] V4 `[CV]` feat(geometry): `minifsd.geometry.camera` pinhole model,
-  checkerboard calibration (OpenCV) and the ground-plane mapping from pixel to
-  floor metres. Test: calibration on OpenCV's sample chessboard images converges
-  with reprojection error below 0.5 px; on MuJoCo-rendered checkerboards it
-  recovers the known fx and fy within 1%; pixel to floor to pixel round-trips
-  (property); pixels above the horizon return no point.
+- [x] V4 `[CV]` feat(geometry): `minifsd.geometry.camera` checkerboard
+  calibration (OpenCV): `find_corners` (9 x 6 inner corners, sub-pixel) and
+  `calibrate` (intrinsics, distortion, rms). The pinhole model came with R10.
+  Changed 2026-11-26: tests use generated boards with a known truth, not
+  OpenCV's sample images (not shipped with pip OpenCV) or MuJoCo renders (the
+  sim has no place in a geometry test). Test: noiseless corners projected from a
+  known camera give it back within 1% (property); corners on a warped board
+  image are found within 0.5 px; a blank image finds none. The real camera is
+  checked in P2.
+- [ ] V4b `[CV]` feat(geometry): the ground-plane mapping from a floor pixel to
+  metres, from camera height and pitch. Only needed for metric depth scale from
+  the floor (future work in E3b), so it waits. Test: pixel to floor to pixel
+  round-trips (property); pixels above the horizon return no point.
 - [x] V5 `[CV]` feat(perception): zero-shot Depth Anything V2 Small on NYUv2
   test, with metric scale from a least-squares fit (report both) and M1 latency.
   Needs the pixi `cv` environment (torch, transformers); discuss before adding.
@@ -376,7 +383,7 @@ rule holds: 2 candidates per experiment.
   the winner of E2 gains too. Pick the floor model by nyuv2-val IoU within the
   latency budget, with precision as the tie-breaker (false floor is the unsafe
   error). Test: none new; the E2a and E2b tests cover the code.
-- [ ] E1a `[CV]` exp: YOLO26n (ultralytics 8.4.214, AGPL-3.0, ADR 0008)
+- [x] E1a `[CV]` exp: YOLO26n (ultralytics 8.4.214, AGPL-3.0, ADR 0008)
   fine-tuned on v10 train plus COCO people train, at 320 px (the camera's
   width), scored by T1's mAP on v10 val and COCO people val, plus latency.
   Changed 2026-11-25: v10 rather than v9 (it is v9 plus furniture, so strictly
@@ -388,7 +395,7 @@ rule holds: 2 candidates per experiment.
   module's dataset and resume logic (ultralytics itself is not run locally); the
   harness candidate turns ONNX output into `detection.Detection` boxes in image
   pixels.
-- [ ] E1b `[CV]` exp: RF-DETR Nano (rfdetr 1.12.1, Apache-2.0, Colab only like
+- [x] E1b `[CV]` exp: RF-DETR Nano (rfdetr 1.12.1, Apache-2.0, Colab only like
   ultralytics), same data, same 320 px input and same scoring as E1a. Exported
   to ONNX and scored through the same `detect_onnx` runtime, with RF-DETR's own
   input (stretched, ImageNet-normalised) and output (normalised boxes, per-class
@@ -415,11 +422,14 @@ rule holds: 2 candidates per experiment.
   disparity (the E3a pick, as teacher) on the 495 NYUv2 train images left after
   removing nyuv2-val and nyuv2-fit; no human depth labels on real images. The
   teacher set is repeated to half of each epoch. Loss: MiDaS's scale-and-shift
-  invariant loss (least-squares align, then mean absolute error). Metric scale
-  from the floor plane at run time is left as future work. Test: the loss is 0
-  for any scale and shift of the target (property) and ignores invalid pixels;
-  the teacher set never takes a nyuv2-val or nyuv2-fit image; training writes a
-  checkpoint and resumes; the harness candidate returns (H, W) disparity.
+  invariant loss (each map shifted by its median and divided by its mean
+  absolute deviation, then mean absolute error), which keeps the sign; a
+  least-squares align does not (see the log, 2026-11-26). Metric scale from the
+  floor plane at run time is left as future work. Test: the loss is 0 for any
+  positive scale and any shift of the target (property), an inverted map scores
+  worse than a flat one (property), and it ignores invalid pixels; the teacher
+  set never takes a nyuv2-val or nyuv2-fit image; training writes a checkpoint
+  and resumes; the harness candidate returns (H, W) disparity.
 - [x] T4 `[CV]` feat(eval): results table and accuracy against latency plot
   (Pareto front) from results.jsonl, one per experiment, for the report. Test: a
   fixture log gives the expected table rows and front.
@@ -457,7 +467,7 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
   `hydra-depth`, plus `hydra-all` (all heads, one forward, timed) for E4's
   latency question. Test: each returns its task's output; the shared forward
   runs once per image.
-- [ ] E4 `[CV]` exp: train HydraNet-lite on Explorer; score each head on its
+- [x] E4 `[CV]` exp: train HydraNet-lite on Explorer; score each head on its
   task's sets; compare against the specialists (E1, E2, E3 winners) on accuracy
   and on summed against shared latency.
 
@@ -465,6 +475,13 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
 
 Steps written at the end of M4. E6 FP32 vs FP16 vs INT8 (ONNX Runtime CPU) under
 the budget profiles; speed vs latency sweep; sign reading; safety monitor.
+
+E6 also gets a sustained run. The comparison tables time each candidate on a
+cool, idle M1 (`scripts/latency.sh`), so the order of runs can't decide the
+ranking. The robot runs hot: the picked stack (floor, boxes, depth) runs for 10
+minutes without a break on the sim camera, p50 is logged each minute, and the
+report gives the settled value next to the cool one. The 50 ms budget is checked
+against the settled value.
 
 ## M6 Report and demo
 
@@ -960,3 +977,32 @@ Add a row at the end of each session.
   models. Latency (hydra-all against the sum of specialists) waits for the clean
   session. RF-DETR Nano scored: v10 val mAP 0.962, COCO people val 0.621 (person
   0.806, obstacle 0.437), about 245 ms p50, 9 times YOLO's.
+- **2026-11-26** E3b trained on Explorer (teacher export 1.5 min, 15 epochs in
+  12 min on a V100). Surprise: the student's global fit had a negative scale
+  (-0.13; every other model's is positive), and the per-image fit inverted it on
+  118 of 120 nyuv2-val images and all 120 of v10 val. The least-squares align in
+  the loss picks any sign, so the student learned "larger is farther" by chance
+  and nothing pushed back. Its scores (nyuv2-val 0.135 / 0.815 per-image, 0.247
+  / 0.549 global) hide this because the harness fit can flip the sign too, but
+  the costmap reads larger as closer. The loss is now MiDaS's median and
+  mean-absolute-deviation normalisation, which keeps the sign, and E3b is
+  retrained. `scripts/latency.sh` added: one cool session timing all 13 report
+  candidates into runs/harness/latency.jsonl.
+- **2026-11-26** Photo protocol: a per-block shot list and the P2 calibration
+  photos (9 x 6 board, shot at home) added. People photos raised from 8 to 12
+  per floor, taken from the spares: E1 reports person recall on the real test
+  floors, and 16 photos would give only about 30 boxes.
+- **2026-11-26** Clean latency session (`scripts/latency.sh`, 13 candidates, M1,
+  2 threads, load under 2.5 and a 60 s rest before each). Its first quiet check
+  (load under 1.5) never passed with VS Code open; at about 2 the floor models
+  matched their earlier clean numbers to 3 ms. p50: classical 3.3, SegFormer-B0
+  127, DINOv2-S 80, YOLO26n 21 (not 27), RF-DETR Nano 246, Depth Anything
+  V2-Small 841, the E3b student 86, HydraNet-lite floor 80, depth 93, boxes 89,
+  all three heads 96. E4's latency answer: one shared pass costs 96 ms against
+  942 ms for the three specialists (187 ms with the student for depth), so
+  sharing halves the cost even against the cheapest set, but its box and depth
+  heads are too weak to replace them. The student at 160 x 120 costs two thirds
+  of SegFormer-B0 at 320 x 240 with a quarter of the pixels, so fixed overhead
+  dominates at that size; a question for E6. E1a, E1b and E4 done; the report
+  has E1 and E4 with these numbers. V4 done: `find_corners` and `calibrate`,
+  tested on generated boards.
