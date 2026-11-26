@@ -515,7 +515,7 @@ scale and shift on the pixels the floor model marks.
   intrinsics and the camera's pose. Test: a level camera sees row v at H fy / (v
   \- cy); pixel to floor to pixel round-trips for any height and downward pitch
   (property); a pixel at or above the horizon meets no floor.
-- [ ] M4.2 `[CV]` feat(perception): metric depth from relative disparity, scale
+- [x] M4.2 `[CV]` feat(perception): metric depth from relative disparity, scale
   and shift fitted per frame on floor pixels against M4.1's floor depth, with a
   global sim fit as the fallback when too little floor is in view. Test: a
   synthetic room whose disparity is any positive scale and shift of the truth

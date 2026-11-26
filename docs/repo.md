@@ -21,7 +21,13 @@ mini-fsd/
 │   │   ├── floor_classical.py   # Classical floor baseline (V3)
 │   │   ├── depth_anything.py    # Depth Anything V2 wrapper (V5)
 │   │   ├── floor_segformer.py   # SegFormer-B0 floor model (E2a)
-│   │   └── floor_dino.py        # Frozen DINOv2 + floor head (E2b)
+│   │   ├── floor_dino.py        # Frozen DINOv2 + floor head (E2b)
+│   │   ├── detect_onnx.py       # YOLO26n / RF-DETR through ONNX Runtime (E1)
+│   │   ├── depth_student.py     # Distilled SegFormer-B0 depth (E3b)
+│   │   ├── centernet.py         # Box targets and decoding (H1)
+│   │   ├── hydra.py             # HydraNet-lite, one backbone, three heads (E4)
+│   │   ├── obstacles.py         # Depth image to costmap points (R10)
+│   │   └── metric_depth.py      # Relative depth to metres, from the floor (M4.2)
 │   ├── eval/
 │   │   ├── metrics.py           # IoU, AbsRel, delta1 (V1)
 │   │   ├── detection.py         # mAP at IoU 0.5 (T1)
@@ -47,8 +53,8 @@ mini-fsd/
 ├── ros2_ws/src/                 # ROS 2 packages: thin shells over minifsd
 │   ├── mini_fsd_sim/            # sim_node: clock, odom, TF, camera (R5)
 │   ├── mini_fsd_bringup/        # Launch files, RViz config, Nav2 params (R6, R8)
-│   ├── mini_fsd_mission/        # mission_node (R9)  (planned)
-│   └── mini_fsd_perception/     # perception_node (R10)  (planned)
+│   ├── mini_fsd_mission/        # mission_node (R9)
+│   └── mini_fsd_perception/     # perception_node (R10, M4.6)
 ├── tools/                       # One-off scripts (spike checks, downloads)
 ├── scripts/
 │   ├── latency.sh               # One cool session timing every candidate (T4)
