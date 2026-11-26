@@ -95,8 +95,8 @@ class DinoFloor(nn.Module):
         """Writes the backbone and head, so loading needs no download."""
         folder.mkdir(parents=True, exist_ok=True)
         self.backbone.save_pretrained(folder / BACKBONE_DIR)
-        head = {
-            k: v
+        head = {  # CPU copies: a head saved on a GPU must load anywhere
+            k: v.detach().cpu()
             for k, v in self.state_dict().items()
             if not k.startswith("backbone.")
         }
@@ -111,7 +111,11 @@ class DinoFloor(nn.Module):
         settings = json.loads((folder / SETTINGS_FILE).read_text())
         backbone = Dinov2Model.from_pretrained(folder / BACKBONE_DIR)
         model = cls(backbone, layers=settings["layers"])
-        head = torch.load(folder / HEAD_FILE, weights_only=True)
+        # map_location: heads saved on Colab before the CPU copies above
+        # hold CUDA tensors, which a Mac can't load as they are.
+        head = torch.load(
+            folder / HEAD_FILE, map_location="cpu", weights_only=True
+        )
         model.load_state_dict(head, strict=False)
         return model
 

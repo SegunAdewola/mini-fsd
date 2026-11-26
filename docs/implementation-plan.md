@@ -760,3 +760,14 @@ Add a row at the end of each session.
   turned up one look of 30 whose pale walls clip 5.8% of pixels to white, over
   the D4 test's 5%: D4's lighting can clip slightly on rare draws. Left as is
   and noted here.
+- **2026-11-25** E2b trained on Colab (T4): 10 epochs, about 60 s each, best v9
+  val IoU 0.956 at epoch 7. Harness on the M1 (2 threads): nyuv2-val IoU 0.467
+  against SegFormer's 0.367, precision 0.72 (SegFormer 0.42), recall 0.57
+  (0.74); it marks 9% of each image as floor against the true 11%, where
+  SegFormer marked 21%. Latency p50 91 ms on nyuv2-val, 76 ms on v9 val. So
+  frozen DINOv2 features carry to real rooms better, as the design guessed, and
+  err toward missing floor rather than inventing it, which is the safer mistake
+  for a robot. Bug found on the way: `head.pt` saved on Colab's GPU held CUDA
+  tensors and would not load on the Mac; `DinoFloor` now saves CPU copies and
+  loads with `map_location="cpu"`. No failing test came first, as a Mac can't
+  produce a CUDA tensor; the real Colab checkpoint is the check.
