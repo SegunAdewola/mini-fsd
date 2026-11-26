@@ -129,3 +129,25 @@ def test_an_unknown_metric_is_an_error(tmp_path: pathlib.Path) -> None:
     rows = report.latest(report.load(_log(tmp_path, FIXTURE)), threads=2)
     with pytest.raises(KeyError):
         report.table(rows, "floor", "abs_rel", ["nyuv2-val"], "nyuv2-val")
+
+
+def test_front_line_runs_from_fast_to_accurate() -> None:
+    points = [(0.33, 3.0), (0.37, 134.0), (0.47, 91.0), (0.20, 50.0)]
+    # Only classical (0.33, 3 ms) and dino (0.47, 91 ms) are unbeaten.
+    assert report.front_line(points) == [(3.0, 0.33), (91.0, 0.47)]
+
+
+def test_plot_writes_an_image_with_the_budget_line(
+    tmp_path: pathlib.Path,
+) -> None:
+    rows = report.latest(report.load(_log(tmp_path, FIXTURE)), threads=2)
+    lines = report.table(
+        rows, "floor", "iou", ["nyuv2-val", "sim:v9"], latency_from="nyuv2-val"
+    )
+    figure = report.plot(lines, "iou", "nyuv2-val", budget_ms=50.0)
+    labels = {t.get_text() for t in figure.axes[0].texts}
+    assert {"dino", "segformer", "classical"} <= labels
+    assert any("50 ms" in t for t in labels)
+    path = tmp_path / "e2.png"
+    figure.savefig(path)
+    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
