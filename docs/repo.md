@@ -29,7 +29,8 @@ mini-fsd/
 │   │   ├── obstacles.py         # Depth image to costmap points (R10)
 │   │   ├── metric_depth.py      # Relative depth to metres, from the floor (M4.2)
 │   │   ├── onnx_export.py       # Floor and depth models to ONNX, cv env (M4.4)
-│   │   └── onnx_models.py       # Those models in ONNX Runtime, no torch (M4.4)
+│   │   ├── onnx_models.py       # Those models in ONNX Runtime, no torch (M4.4)
+│   │   └── pipeline.py          # One frame to costmap points, ROS-free (M4.5)
 │   ├── eval/
 │   │   ├── metrics.py           # IoU, AbsRel, delta1 (V1)
 │   │   ├── detection.py         # mAP at IoU 0.5 (T1)

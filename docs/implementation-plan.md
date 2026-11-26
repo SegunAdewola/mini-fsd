@@ -526,7 +526,7 @@ scale and shift on the pixels the floor model marks.
 - [x] M4.4 `[CV]` feat(perception): ONNX export of the DINOv2 floor model and
   the depth student, and ONNX Runtime wrappers with the same interface. Test:
   ONNX and torch outputs agree within tolerance on random images.
-- [ ] M4.5 `[CV]` feat(perception): `minifsd.perception.pipeline`, RGB to floor
+- [x] M4.5 `[CV]` feat(perception): `minifsd.perception.pipeline`, RGB to floor
   mask, boxes and metric depth, then obstacle points; person and obstacle boxes
   add a column of points where their bottom edge meets the floor. ROS-free.
   Test: with fake models, a box becomes points at its floor position; floor
