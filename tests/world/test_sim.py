@@ -14,7 +14,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from minifsd.geometry import camera, frames
-from minifsd.world import floor_plan, mjcf, sim
+from minifsd.world import floor_plan, mjcf, people, sim
 
 PLAN = floor_plan.generate_floor_plan(seed=0, rooms_per_side=2)
 TICK = 0.05  # seconds between commands
@@ -433,3 +433,25 @@ def test_every_part_of_a_table_labels_as_one_obstacle() -> None:
     parts = {s.model.geom(n).id for n in mjcf.clutter_geoms(0, table)}
     assert len(parts) == 5
     assert all(objects[g] == ("obstacle", "clutter_0") for g in parts)
+
+
+def test_driving_into_the_end_wall_is_a_contact(s: sim.Sim) -> None:
+    _drive(s, 1.0, 0.0, PLAN.length + 2)
+    assert s.robot_contacts() > 0
+
+
+def test_standing_on_the_floor_is_no_contact(s: sim.Sim) -> None:
+    _drive(s, 0.3, 0.0, 1.0)  # moving, touching only the floor
+    assert s.robot_contacts() == 0
+
+
+def test_driving_into_a_walker_is_a_contact() -> None:
+    # A walker standing still (speed 0) 1 m ahead of the spawn.
+    x = PLAN.spawn.x + 1.0
+    still = people.Walker(x_start=x, x_end=x + 1.0, y=0.0, speed=0.0, phase=0.0)
+    s = sim.Sim(PLAN, walkers=[still])
+    try:
+        _drive(s, 0.5, 0.0, 3.0)
+        assert s.robot_contacts() > 0
+    finally:
+        s.close()

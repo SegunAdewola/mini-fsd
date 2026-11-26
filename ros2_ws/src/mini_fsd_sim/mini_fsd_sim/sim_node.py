@@ -6,6 +6,8 @@ between Sim and ROS messages:
 - /cmd_vel (Twist) in: Sim.command(v, w).
 - A wall-clock timer steps Sim, then publishes /clock, /odom, the
   odom -> base_link transform, and the camera topics.
+- /sim/collisions (UInt32): running count of the robot's bumps into
+  anything but the floor (minifsd.eval.closed_loop.Bumps, M4.8).
 - At start-up, /tf_static gets base_link -> camera_link -> camera_optical_frame.
 
 This node owns simulation time. Its own timer runs on the wall clock, since
@@ -31,8 +33,9 @@ from geometry_msgs.msg import (
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import Header
+from std_msgs.msg import Header, UInt32
 
+from minifsd.eval import closed_loop
 from minifsd.geometry import frames
 from minifsd.world import clutter as clutter_lib
 from minifsd.world import floor_plan, mjcf, people, sim
@@ -103,6 +106,11 @@ class SimNode(rclpy.node.Node):
 
         self._clock_pub = self.create_publisher(Clock, "clock", 10)
         self._odom_pub = self.create_publisher(Odometry, "odom", 10)
+        # Running count of bumps into anything but the floor (M4.8).
+        self._bumps = closed_loop.Bumps()
+        self._collisions_pub = self.create_publisher(
+            UInt32, "sim/collisions", 10
+        )
         self._rgb_pub = self.create_publisher(
             Image, "camera/color/image_raw", 10
         )
@@ -134,6 +142,8 @@ class SimNode(rclpy.node.Node):
 
     def _tick(self) -> None:
         self._sim.step(self._dt)
+        self._bumps.update(self._sim.robot_contacts())
+        self._collisions_pub.publish(UInt32(data=self._bumps.total))
         stamp = _stamp(self._sim.time)
         self._clock_pub.publish(Clock(clock=stamp))
         self._publish_odom(stamp)

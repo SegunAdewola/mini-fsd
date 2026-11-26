@@ -24,6 +24,7 @@ from geometry_msgs.msg import Twist, Vector3
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image
+from std_msgs.msg import UInt32
 
 from mini_fsd_sim import sim_node
 from minifsd.geometry import frames
@@ -42,6 +43,7 @@ class Probe(rclpy.node.Node):
         self.rgb: list[Image] = []
         self.depth: list[Image] = []
         self.info: list[CameraInfo] = []
+        self.collisions: list[UInt32] = []
         self.create_subscription(Odometry, "odom", self.odom.append, 10)
         self.create_subscription(Clock, "clock", self.clock.append, 10)
         self.create_subscription(
@@ -52,6 +54,9 @@ class Probe(rclpy.node.Node):
         )
         self.create_subscription(
             CameraInfo, "camera/color/camera_info", self.info.append, 10
+        )
+        self.create_subscription(
+            UInt32, "sim/collisions", self.collisions.append, 10
         )
         self.cmd_vel = self.create_publisher(Twist, "cmd_vel", 10)
         self.tf_buffer = tf2_ros.Buffer()
@@ -199,5 +204,32 @@ def test_people_parameter_puts_walkers_in_the_world_clear_of_boxes() -> None:
         assert boxes_only.walkers == ()
         node.destroy_node()
         boxes_only.destroy_node()
+    finally:
+        rclpy.shutdown()
+
+
+def test_driving_into_a_wall_counts_a_collision() -> None:
+    rclpy.init()
+    try:
+        # One room per side: the end wall is a few metres from the spawn.
+        sim = sim_node.SimNode(
+            parameter_overrides=[
+                rclpy.parameter.Parameter("rooms_per_side", value=1)
+            ]
+        )
+        probe = Probe()
+        executor = rclpy.executors.SingleThreadedExecutor()
+        executor.add_node(sim)
+        executor.add_node(probe)
+        deadline = time.monotonic() + 20.0
+        forward = Twist(linear=Vector3(x=1.0))
+        while not (probe.collisions and probe.collisions[-1].data > 0):
+            assert time.monotonic() < deadline, "no collision counted"
+            probe.cmd_vel.publish(forward)
+            executor.spin_once(timeout_sec=0.01)
+        assert probe.collisions[-1].data == 1  # one wall, one bump
+        executor.shutdown()
+        sim.destroy_node()
+        probe.destroy_node()
     finally:
         rclpy.shutdown()

@@ -538,7 +538,19 @@ scale and shift on the pixels the floor model marks.
 - [x] M4.7 `[R]` feat(world): moving person-sized obstacles in the sim. Test:
   they move, stay on the floor and never enter a wall.
 - [ ] M4.8 `[R]` exp: closed loop, the same missions with true depth and with
-  model perception; success, collisions and time per mission.
+  model perception (decided 2026-11-26). 5 seeds x 4 rooms, both with
+  `clutter:=6 people:=2`, 40 missions; one launch per seed and condition with
+  the 4 missions in turn, so Nav2 starts 10 times, not 40. Per mission: the
+  outcome (succeeded, failed, or timed out at 120 s), the time, and collisions,
+  any contact between the robot and anything but the floor (walkers yield, so
+  every contact is the robot's). Code: `Sim.robot_contacts()` and
+  `/sim/contacts` from `sim_node`; `minifsd.eval.closed_loop` for the table
+  (success rate, collision-free success rate, median time per condition);
+  `tools/closed_loop.py` to run it all headless. Test: the robot pushed into a
+  wall reports a contact and standing on the floor reports none; a fixture of
+  mission records gives the expected table; a dry run of one seed and one room
+  writes a record. Walkers are not rendered as people, so the person detector is
+  not tested here; the real photos test it.
 
 ## M5 Edge and safety
 

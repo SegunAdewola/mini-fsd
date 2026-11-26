@@ -166,6 +166,27 @@ class Sim:
                 self.data.ctrl[ctrl] = value
             mujoco.mj_step(self.model, self.data)
 
+    def robot_contacts(self) -> int:
+        """How many contacts the robot has now with anything but the floor.
+
+        A wall, a box, a door frame or a walker all count (M4.8). The floor
+        doesn't: the robot always stands on it.
+        """
+        base = self.model.body("base").id
+        count = 0
+        for contact in self.data.contact[: self.data.ncon]:
+            a, b = int(contact.geom1), int(contact.geom2)
+            mine = (
+                self.model.geom_bodyid[a] == base,
+                self.model.geom_bodyid[b] == base,
+            )
+            if mine[0] == mine[1]:
+                continue  # neither geom is the robot's (or, impossibly, both)
+            other = b if mine[0] else a
+            if other != self._floor_geom:
+                count += 1
+        return count
+
     def walker_positions(self) -> np.ndarray:
         """(N, 3) each walker's centre in the world, as the sim has it."""
         return np.array(self.data.mocap_pos, dtype=np.float64)
