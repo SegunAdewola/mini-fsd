@@ -148,3 +148,28 @@ def markdown(rows: Sequence[Row]) -> str:
             f"| {r.collisions_per_mission:.2f} |"
         )
     return "\n".join(lines) + "\n"
+
+
+def outcome_of(status: Sequence[str], room: int) -> str | None:
+    """How the mission to `room` ended, from the mission node's status lines.
+
+    Only lines naming this room count. When a new mission replaces one that
+    timed out, Nav2 aborts the old goal and the mission node reports it
+    ("failed: room 106 ..."); that end belongs to the old mission.
+
+    Args:
+        status: /mission/status messages since this mission was sent.
+        room: The room this mission asked for.
+
+    Returns:
+        "succeeded" or "failed", or None while it is still running. A
+        rejected instruction counts as failed.
+    """
+    for line in status:
+        word, _, rest = line.partition(":")
+        if word == "rejected":
+            return "failed"
+        named = rest.strip().split(" ")[:2] == ["room", str(room)]
+        if word in ("succeeded", "failed") and named:
+            return word
+    return None

@@ -95,3 +95,21 @@ def test_the_markdown_table_has_a_line_per_condition() -> None:
     assert len(lines) == 2 + 2  # header, rule, truth, model
     assert "| truth | 4 | 75% | 50% | 40 | 0.25 |" in lines
     assert "| model | 2 | 50% | 0% | 45 | 1.50 |" in lines
+
+
+@pytest.mark.parametrize(
+    ("lines", "outcome"),
+    [
+        (["accepted: room 105"], None),  # still driving
+        (["accepted: room 105", "succeeded: room 105"], "succeeded"),
+        (["failed: room 105 (status 6)"], "failed"),
+        (["rejected: Nav2 is not running yet"], "failed"),
+        # The goal this one replaced reports its own end: not ours.
+        (["accepted: room 105", "failed: room 106 (status 6)"], None),
+        (["failed: room 1050 (status 6)"], None),  # a different room
+    ],
+)
+def test_only_the_current_rooms_status_ends_a_mission(
+    lines: list[str], outcome: str | None
+) -> None:
+    assert closed_loop.outcome_of(lines, 105) == outcome

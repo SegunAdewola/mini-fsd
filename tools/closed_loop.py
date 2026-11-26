@@ -93,15 +93,9 @@ def run_mission(w: Watcher, condition: str, seed: int, room: int) -> None:
     outcome = "timeout"
     while w.sim_time - start_sim < TIMEOUT and time.monotonic() < wall_end:
         rclpy.spin_once(w, timeout_sec=0.05)
-        ended = [
-            s for s in w.status if s.split(":")[0] in ("succeeded", "failed")
-        ]
-        rejected = [s for s in w.status if s.startswith("rejected")]
-        if ended:
-            outcome = ended[0].split(":")[0]
-            break
-        if rejected:
-            outcome = "failed"
+        ended = closed_loop.outcome_of(w.status, room)
+        if ended is not None:
+            outcome = ended
             break
     mission = closed_loop.Mission(
         condition=condition,
