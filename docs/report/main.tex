@@ -46,8 +46,48 @@ Northeastern University}}
 % segmentation (SegFormer), monocular depth (Depth Anything V2 and 3).
 
 \section{System}
-% MuJoCo world from generated floor plans (R1 to R3), ROS 2 and Nav2 on top
-% (R5 to R9), ground-truth pose (ADR 0004). One figure: the pipeline.
+\label{sec:system}
+
+The robot lives in a MuJoCo simulation and is driven through ROS~2
+Jazzy~\cite{macenski2022ros2} and Nav2~\cite{macenski2020marathon}, the
+standard stack for mobile robots. All logic that does not need ROS (the world
+generator, the simulator wrapper, geometry, perception and evaluation) sits in
+one Python package with its own tests, and the ROS nodes only wrap it. The
+same code therefore runs in the robot, the data engine, training and the
+harness.
+
+\subsection{World and Robot}
+
+The world is built from the seeded floor plans of Section~\ref{sec:data}. The
+robot is a planar base: one body with joints that slide along $x$ and $y$ and
+turn about $z$, driven by velocity actuators. The simulator turns Nav2's
+command, a forward speed $v$ and turn rate $\omega$, into $\dot x = v\cos\psi$,
+$\dot y = v\sin\psi$ and $\dot\psi = \omega$. We chose this over modelled
+wheels because the experiments measure perception and planning, and wheel
+slip would add an error of its own to every speed test. Speeds are clamped at
+3\,m/s, and a watchdog stops the robot when no command arrives for 0.3\,s, so
+a stalled planner or a crashed node cannot leave it driving. A forward camera
+at 0.5\,m renders RGB and depth at $320\times240$.
+
+\subsection{Navigation}
+
+A simulator node publishes the clock, odometry, transforms, the camera image,
+depth and calibration, and it takes velocity commands. Nav2 plans with the
+Smac 2D planner~\cite{macenski2024smac} and follows the path with the MPPI
+controller~\cite{williams2018mppi}. Its global map is generated from the same
+floor plan as the world, so map and world agree exactly, and the robot's pose
+comes from the simulator rather than from localization. A camera-only robot
+would need visual localization, which is a project of its own; the report
+states the assumption and does not test it. A mission node turns a request
+such as ``go to room 103'' into a goal pose in front of that room's door.
+
+Clutter is left off the global map on purpose, so the robot can only learn
+about it through the camera. A perception node turns a depth image into a
+point cloud in the robot's frame and feeds Nav2's local costmap, which is
+how an obstacle the planner has never seen becomes one it avoids. That node
+currently reads the simulator's exact depth. Putting the trained models in its
+place is the remaining step of the project, and the experiments below choose
+those models.
 
 \section{Synthetic Data Engine}
 \label{sec:data}
