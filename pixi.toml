@@ -55,9 +55,13 @@ ninja = "*"
 # --editable`, which setuptools 80+ rejects. Edits need a rebuild (about 4 s);
 # test-ros and sim depend on build, so pixi does it for you.
 build = { cmd = "colcon build", cwd = "ros2_ws" }
-sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py'", depends-on = ["build"] }
+# Launch arguments pass through: `pixi run nav perception:=model people:=2`.
+# pixi appends them after the bash -c script, where bash would take the first
+# as the script's name ($0); the trailing name fills $0 and "$@" forwards the
+# rest to ros2 launch.
+sim = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup sim.launch.py \"$@\"' sim", depends-on = ["build"] }
 # Sim plus Nav2: send goals with RViz's "2D Goal Pose" tool (R8).
-nav = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup nav.launch.py'", depends-on = ["build"] }
+nav = { cmd = "bash -c 'source ros2_ws/install/setup.bash && ros2 launch mini_fsd_bringup nav.launch.py \"$@\"' nav", depends-on = ["build"] }
 teleop = "ros2 run teleop_twist_keyboard teleop_twist_keyboard"
 # ROS node smoke tests. Local only: CI has no ROS env and no GPU.
 test-ros = { cmd = "colcon test --event-handlers console_direct+ && colcon test-result --verbose", cwd = "ros2_ws", depends-on = ["build"] }
