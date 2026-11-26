@@ -523,7 +523,7 @@ scale and shift on the pixels the floor model marks.
 - [ ] M4.3 `[R]` build: `onnx` and `onnxscript` in `cv` (export only) and
   `onnxruntime` in the ROS env (the same 1.32 conda-forge build as `cv`). Test:
   both envs solve; `import onnxruntime` works in the ROS env.
-- [ ] M4.4 `[CV]` feat(perception): ONNX export of the DINOv2 floor model and
+- [x] M4.4 `[CV]` feat(perception): ONNX export of the DINOv2 floor model and
   the depth student, and ONNX Runtime wrappers with the same interface. Test:
   ONNX and torch outputs agree within tolerance on random images.
 - [ ] M4.5 `[CV]` feat(perception): `minifsd.perception.pipeline`, RGB to floor
@@ -1084,3 +1084,16 @@ Add a row at the end of each session.
   The first, inverted student is kept as data/models/depth-student-v1. E3b and
   T5 done: the student is the depth pick. The report's E3 section has these
   numbers.
+- **2026-11-26** M4.4: the DINOv2 floor model and the depth student export to
+  ONNX (torch 2.14's dynamo exporter, fixed input size) and run in ONNX Runtime
+  without torch. On 20 nyuv2-val images the ONNX floor masks match torch's on
+  every pixel and the disparity differs by at most 2e-6 of its range. Surprise,
+  rough timings (not a clean session, 2 threads): the student drops from 82 ms
+  in torch to 16 ms in ONNX Runtime, so torch's per-call overhead was most of
+  it, but the floor model rises from 72 ms to 225 ms. A ViT is mostly large
+  matrix products, and the cv env's torch uses Apple Accelerate (the M1's AMX
+  unit) while ONNX Runtime's CPU kernels don't. The CoreML provider gets it to
+  126 ms, with logits up to 0.05 off (likely FP16). The loop runs on ONNX anyway
+  (A1); bringing the floor model down is E6's first job, with INT8, ONNX
+  Runtime's transformer fusions and CoreML as the candidates. The picked stack
+  is about 262 ms in ONNX Runtime for now.
