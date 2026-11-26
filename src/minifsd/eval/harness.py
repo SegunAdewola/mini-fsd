@@ -63,6 +63,8 @@ YOLO_ONNX = pathlib.Path("data/models/detect-yolo26n/best.onnx")
 RFDETR_ONNX = pathlib.Path(
     "data/models/detect-rfdetr-nano/inference_model.onnx"
 )
+# E3a: DA3-Small's depth maps, made on Colab (minifsd.train.da3_predict).
+DA3_PREDICTIONS = pathlib.Path("data/models/da3-small-predictions.npz")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,6 +77,9 @@ class Candidate:
     name: str
     task: Task
     predict: Callable[[np.ndarray], Any]
+    # False for predictions made elsewhere (E3a: DA3 on Colab), whose
+    # latency here would only time a lookup; none is logged for them.
+    timed: bool = True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -179,6 +184,8 @@ def evaluate(
             "global_scale": global_fit.scale,
             "global_shift": global_fit.shift,
         }
+    if not candidate.timed:
+        p50 = p95 = float("nan")
     return Result(
         candidate=candidate.name,
         task=candidate.task,
@@ -372,6 +379,16 @@ def _detect_rfdetr(
     return Candidate("detect-rfdetr-nano", "detect", model.predict)
 
 
+def _depth_da3(device: str, threads: int, input_size: int | None) -> Candidate:
+    del device, threads  # nothing runs here: predictions are looked up
+    if input_size is not None:
+        raise ValueError("depth-da3-small was run on Colab at its default size")
+    from minifsd.eval import precomputed
+
+    model = precomputed.PrecomputedDepth(DA3_PREDICTIONS)
+    return Candidate("depth-da3-small", "depth", model.predict, timed=False)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -390,6 +407,7 @@ CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     },
     "detect-yolo26n": _detect_yolo,
     "detect-rfdetr-nano": _detect_rfdetr,
+    "depth-da3-small": _depth_da3,
 }
 
 
@@ -504,7 +522,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     candidate = make_candidate(
         args.candidate, args.device, args.threads, args.input_size
     )
-    candidate.predict(np.zeros((240, 320, 3), np.uint8))  # warm-up
+    if candidate.timed:  # nothing to warm up in a lookup
+        candidate.predict(np.zeros((240, 320, 3), np.uint8))
     fit = load_dataset(args.fit) if candidate.task == "depth" else None
     result = evaluate(
         candidate,

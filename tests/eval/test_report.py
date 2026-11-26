@@ -151,3 +151,16 @@ def test_plot_writes_an_image_with_the_budget_line(
     path = tmp_path / "e2.png"
     figure.savefig(path)
     assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_an_untimed_run_shows_no_latency_and_stays_off_the_front(
+    tmp_path: pathlib.Path,
+) -> None:
+    rows = [*FIXTURE, _row("da3-colab", "nyuv2-val", 0.99, float("nan"))]
+    runs = report.latest(report.load(_log(tmp_path, rows)), threads=2)
+    lines = report.table(runs, "floor", "iou", ["nyuv2-val"], "nyuv2-val")
+    da3 = next(x for x in lines if x.candidate == "da3-colab")
+    assert da3.p50_ms is None and da3.p95_ms is None
+    assert not da3.on_front  # no latency, so no place on a latency front
+    text = report.markdown(lines, "iou")
+    assert "nan" not in text

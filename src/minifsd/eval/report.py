@@ -22,6 +22,7 @@ scale), the front as steps and the latency budget as a dashed line.
 import argparse
 import dataclasses
 import json
+import math
 import pathlib
 from collections.abc import Sequence
 from typing import Any
@@ -49,8 +50,8 @@ class Run:
     task: str
     dataset: str
     metrics: dict[str, float]
-    p50_ms: float
-    p95_ms: float
+    p50_ms: float | None  # None for untimed runs (made elsewhere)
+    p95_ms: float | None
     threads: int
     time: str
 
@@ -66,6 +67,11 @@ class Line:
     on_front: bool
 
 
+def _timed(ms: float | None) -> float | None:
+    # The harness logs NaN for an untimed candidate (E3a).
+    return None if ms is None or math.isnan(ms) else ms
+
+
 def load(path: pathlib.Path) -> list[Run]:
     """Reads every line of a harness log."""
     runs = []
@@ -78,8 +84,8 @@ def load(path: pathlib.Path) -> list[Run]:
                     task=row["task"],
                     dataset=row["dataset"],
                     metrics=row["metrics"],
-                    p50_ms=row["p50_ms"],
-                    p95_ms=row["p95_ms"],
+                    p50_ms=_timed(row["p50_ms"]),
+                    p95_ms=_timed(row["p95_ms"]),
                     threads=row["threads"],
                     time=row["time"],
                 )

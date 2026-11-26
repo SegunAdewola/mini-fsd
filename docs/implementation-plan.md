@@ -395,9 +395,18 @@ rule holds: 2 candidates per experiment.
   sigmoid logits) read from rfdetr 1.12.1's export code. Test: the training
   module's dataset, resume and export flow (fake `rfdetr`); decoding maps boxes
   to photo pixels and keeps two classes for one query.
-- [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot through the harness, on
-  NYUv2 test and v9 val, next to V5's Depth Anything V2 Small numbers, with the
-  same per-image and global scale fits.
+- [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot, next to V5's Depth
+  Anything V2 Small, on NYUv2 test, nyuv2-val and v9 val, with the same
+  per-image and global scale fits. Changed 2026-11-25 (option chosen: Colab-only
+  accuracy): DA3's package (depth-anything-3 0.1.1) pins numpy\<2 and imports
+  trimesh, moviepy and evo on load, so it can't share our environments.
+  `minifsd.eval.precomputed` exports the exact images the harness would use,
+  named by a hash of their pixels; `minifsd.train.da3_predict` runs DA3 on them
+  in a throwaway Colab virtual environment; the harness candidate
+  `depth-da3-small` looks the depth maps up, untimed (no M1 latency; the report
+  says why). Test: the key follows the pixels; export is lossless and skips
+  repeats; predictions come back as 1/depth by key; an untimed candidate logs
+  NaN latency, which the report shows as "—" and keeps off the front.
 - [ ] E3b `[CV]` exp: a small distilled depth network: a light encoder and
   decoder trained on v9's exact depth plus Depth Anything V2's outputs on NYUv2
   train (scale and shift fitted per image), with metric scale from the floor

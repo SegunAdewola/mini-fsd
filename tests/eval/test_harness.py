@@ -360,3 +360,19 @@ def test_the_rf_detr_candidate_decodes_as_detr(
     c = harness.make_candidate("detect-rfdetr-nano", device="cpu", threads=2)
     assert (c.name, c.task) == ("detect-rfdetr-nano", "detect")
     assert opened == [(harness.RFDETR_ONNX, 2, "detr")]
+
+
+def test_the_da3_candidate_reads_colab_predictions_untimed(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # E3a: DA3 ran on Colab; the harness only looks its depth maps up.
+    from minifsd.eval import precomputed
+
+    rgb = np.zeros((12, 16, 3), np.uint8)
+    precomputed.save(
+        tmp_path / "da3.npz", {precomputed.key(rgb): np.full((12, 16), 2.0)}
+    )
+    monkeypatch.setattr(harness, "DA3_PREDICTIONS", tmp_path / "da3.npz")
+    c = harness.make_candidate("depth-da3-small", device="cpu", threads=2)
+    assert (c.name, c.task, c.timed) == ("depth-da3-small", "depth", False)
+    np.testing.assert_allclose(c.predict(rgb), 0.5, rtol=1e-3)
