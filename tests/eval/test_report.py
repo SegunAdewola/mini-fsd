@@ -201,6 +201,19 @@ def test_latex_table_has_the_asked_columns_and_marks_the_front(
     assert body[2].startswith("classical$^\\dagger$ & 0.330 & -- & --")
 
 
+def test_latex_leaves_out_a_candidate_with_nothing_in_any_column(
+    tmp_path: pathlib.Path,
+) -> None:
+    # A sweep run scored only on another dataset would be a row of dashes.
+    rows = [*FIXTURE, _row("segformer@154", "sim:v7", 0.98, 40.0)]
+    runs = report.latest(report.load(_log(tmp_path, rows)), threads=2)
+    text = report.latex(
+        runs, "floor", [("iou", "nyuv2-val")], latency_from="nyuv2-val"
+    )
+    assert "segformer@154" not in text
+    assert "classical" in text
+
+
 def test_dataset_labels_drop_the_folder_path() -> None:
     assert report.dataset_label("sim:data/sim/v10/val") == "v10 val"
     assert report.dataset_label("nyuv2-val") == "nyuv2-val"

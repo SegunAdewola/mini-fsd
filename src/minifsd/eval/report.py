@@ -247,8 +247,11 @@ METRIC_LABELS = {
     "ap50_obstacle": "Obstacle AP",
     "ap50_room_sign": "Sign AP",
     "ap50_person": "Person AP",
-    "abs_rel_global": "AbsRel",
-    "delta1_global": "$\\delta_1$",
+    # Depth, per-image fit (an upper bound) and one global fit (deployable).
+    "abs_rel_oracle": "AbsRel each",
+    "delta1_oracle": "$\\delta_1$ each",
+    "abs_rel_global": "AbsRel global",
+    "delta1_global": "$\\delta_1$ global",
 }
 LATEX_MISSING = "--"
 
@@ -292,6 +295,12 @@ def latex(
         v = run.metrics[metric]
         return None if math.isnan(v) else v
 
+    # A candidate scored only on other sets (e.g. a sweep) has no row here.
+    candidates = [
+        n
+        for n in candidates
+        if any(value(n, m, d) is not None for m, d in columns)
+    ]
     first_metric, first_dataset = columns[0]
     scored, points = [], []
     for name in candidates:
