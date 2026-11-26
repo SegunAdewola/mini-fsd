@@ -25,7 +25,7 @@ protocol changes, change it here first.
 - Main 1x lens, landscape, 4:3, no zoom, no Portrait, no Night Sight.
 - Floor visible in almost every photo. Horizon level.
 - Move about 6 ft or turn to a new view between shots.
-- About 8 photos per floor with people in them, faces turned away or far off.
+- About 12 photos per floor with people in them, faces turned away or far off.
 - No identifiable faces.
 
 ## Shot list
@@ -57,8 +57,8 @@ Fix anything now, before the test floors.
 | [ ]  | Glass walls and doors                                          | 3     | 2     |
 | [ ]  | Things on the floor: chairs, bins, bags, boxes                 | 2     | 3     |
 | [ ]  | Hard cases: shiny floor, carpet, bright window, dim corner     | 2     | 2     |
-| [ ]  | People from behind, side-on or far off (see [People](#people)) | 4     | 4     |
-| [ ]  | Spares: retake anything blurred, or a view not covered yet     | 5     | 5     |
+| [ ]  | People from behind, side-on or far off (see [People](#people)) | 6     | 6     |
+| [ ]  | Spares: retake anything blurred, or a view not covered yet     | 3     | 3     |
 
 Doors matter more than the table suggests. COCO has no door class, so the
 detector learned doors from sim only (E1), and real door AP comes from these
@@ -163,7 +163,7 @@ Per floor, roughly:
 | Glass walls and doors, on purpose                            | 5     | Known failure case for depth                    |
 | Things on the floor: chairs, bins, bags, boxes               | 5     | Obstacle dodging                                |
 | Hard cases: shiny floor, carpet, bright windows, dim corners | 4     | Honest coverage                                 |
-| People walking or standing, from behind, side-on or far off  | 8     | Person detection (moving obstacles)             |
+| People walking or standing, from behind, side-on or far off  | 12    | Person detection (moving obstacles)             |
 
 Move about 6 ft (2 m) between shots, or turn to face a new direction. Spread the
 photos over the whole floor, not just near the elevators.
@@ -171,8 +171,11 @@ photos over the whole floor, not just near the elevators.
 ## People
 
 People are part of the test now: the robot has to detect them as obstacles. Take
-about 8 photos per floor with people in them, on top of the shot list above.
-Keep them unidentifiable:
+about 12 photos per floor with people in them, on top of the shot list above.
+Twelve, not eight: floor 15 is validation, so person recall on the test set
+rests on floors 14 and 2 alone, and eight a floor gave only about 30 person
+boxes. Where people are hard to find, take the shortfall on a busier floor. Keep
+them unidentifiable:
 
 - Photograph people from behind, side-on, or far enough away (about 15 ft or
   more) that a face is a few pixels.
