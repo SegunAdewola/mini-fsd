@@ -15,7 +15,8 @@ mini-fsd/
 │   │   └── occupancy.py         # Layout -> Nav2 occupancy map (R7)
 │   ├── geometry/
 │   │   ├── frames.py            # Quaternions, optical frame, intrinsics (R4)
-│   │   └── camera.py            # Pinhole, calibration, floor mapping (V4)
+│   │   ├── camera.py            # Pinhole model, checkerboard calibration (V4)
+│   │   └── ground.py            # Where a pixel's ray meets the floor (M4.1)
 │   ├── perception/
 │   │   ├── floor_classical.py   # Classical floor baseline (V3)
 │   │   ├── depth_anything.py    # Depth Anything V2 wrapper (V5)
