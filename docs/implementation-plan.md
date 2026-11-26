@@ -776,3 +776,11 @@ Add a row at the end of each session.
   tensors and would not load on the Mac; `DinoFloor` now saves CPU copies and
   loads with `map_location="cpu"`. No failing test came first, as a Mac can't
   produce a CUDA tensor; the real Colab checkpoint is the check.
+- **2026-11-25** T4, first half: `minifsd.eval.report` reads the harness log,
+  keeps the latest run per candidate and dataset at one thread budget, and
+  prints a Markdown table with the Pareto front marked (accuracy on the first
+  dataset against p50 latency on a named one, since image size changes latency).
+  E2 so far: DINOv2 and classical are on the front; SegFormer is off it, beaten
+  by DINOv2 on both nyuv2-val IoU and speed. The plot is the second half; it
+  needs matplotlib declared in `pixi.toml` (today it is only there as something
+  else's dependency).
