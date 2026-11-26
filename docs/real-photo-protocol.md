@@ -7,6 +7,8 @@ protocol changes, change it here first.
 ## Contents
 
 - [Quick card](#quick-card)
+- [Shot list](#shot-list)
+- [Calibration photos](#calibration-photos)
 - [How many](#how-many)
 - [Getting the height right](#getting-the-height-right)
 - [Camera settings](#camera-settings)
@@ -25,6 +27,63 @@ protocol changes, change it here first.
 - Move about 6 ft or turn to a new view between shots.
 - About 8 photos per floor with people in them, faces turned away or far off.
 - No identifiable faces.
+
+## Shot list
+
+Tick these off on the phone. The sections below say how to shoot each kind; this
+is what to shoot and in which order.
+
+**Pack:** a 20 in string with a key tied on, a marker and six cards (F15, F14
+and F2, each at 20 in and at 59 in), a charged phone with at least 2 GB free.
+About 180 photos at 4 MB each.
+
+**Order:** floor 15, then 14, then 2. Floor 15 is validation, so any early
+mistake costs a validation photo, not a test one. On each floor, shoot the 59 in
+block first (standing is quicker), then the 20 in block. Allow about 30 minutes
+per floor, so 1.5 to 2 hours for the visit.
+
+**Check after the first block on floor 15.** Open five photos at full size:
+sharp, horizon level, floor in view, 4:3, and the camera info shows the 1x lens.
+Fix anything now, before the test floors.
+
+### Each block (one floor, one height): 30 photos
+
+| Done | What                                                           | 59 in | 20 in |
+| ---- | -------------------------------------------------------------- | ----- | ----- |
+| [ ]  | Card photo ("F15 · 59 in")                                     | 1     | 1     |
+| [ ]  | Corridors and lobby, looking along; a door in frame            | 5     | 5     |
+| [ ]  | Open areas and desk clusters                                   | 5     | 5     |
+| [ ]  | Door signs, readable, 3 to 10 ft away                          | 4     | 4     |
+| [ ]  | Glass walls and doors                                          | 3     | 2     |
+| [ ]  | Things on the floor: chairs, bins, bags, boxes                 | 2     | 3     |
+| [ ]  | Hard cases: shiny floor, carpet, bright window, dim corner     | 2     | 2     |
+| [ ]  | People from behind, side-on or far off (see [People](#people)) | 4     | 4     |
+| [ ]  | Spares: retake anything blurred, or a view not covered yet     | 5     | 5     |
+
+Doors matter more than the table suggests. COCO has no door class, so the
+detector learned doors from sim only (E1), and real door AP comes from these
+photos alone. Get closed doors, open doors and doors seen at an angle into the
+corridor shots.
+
+Things on the floor lean to 20 in because that is the robot's view of an
+obstacle. Glass leans the other way only to keep the block at 30.
+
+## Calibration photos
+
+For P2. These need the phone, not the campus, so shoot them at home before or
+after the visit, with exactly the camera settings below (1x lens, 4:3, no zoom).
+Calibration holds only for that lens and zoom.
+
+- Print OpenCV's 9 x 6 checkerboard (10 x 7 squares) at 100% scale on letter
+  paper. Measure one square with a ruler and write the size on the back.
+- Tape it flat to a clipboard or stiff cardboard. A curled sheet ruins the
+  calibration.
+- Take 20 photos. Let the board fill a third to a half of the frame, and move it
+  around: centre, all four corners, near and far, tilted up to about 45 degrees
+  each way. Corners of the frame are where lens distortion shows, so don't skip
+  them.
+- Good light, no glare on the paper, every square sharp.
+- Save them to `data/real/raw/calibration/`.
 
 ## How many
 
