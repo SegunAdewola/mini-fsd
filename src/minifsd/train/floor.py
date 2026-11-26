@@ -131,7 +131,8 @@ class FloorDataset(torch_data.Dataset[tuple[torch.Tensor, torch.Tensor]]):
         return torch.from_numpy(x), torch.from_numpy(y)
 
 
-def _device(choice: str | None) -> str:
+def device_of(choice: str | None) -> str:
+    """The device asked for, else cuda, then mps, then cpu."""
     if choice is not None:
         return choice
     if torch.cuda.is_available():
@@ -139,13 +140,15 @@ def _device(choice: str | None) -> str:
     return "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-def _device_name(device: str) -> str:
+def device_name(device: str) -> str:
+    """The GPU's name on cuda (it goes in the log), else the device."""
     if device == "cuda":
         return str(torch.cuda.get_device_name())
     return device
 
 
-def _save_atomic(state: dict[str, Any], path: pathlib.Path) -> None:
+def save_atomic(state: dict[str, Any], path: pathlib.Path) -> None:
+    """torch.save to a temporary name, then rename: never half a file."""
     part = path.with_name(path.name + ".part")
     torch.save(state, part)
     os.replace(part, path)  # a dropped session never leaves half a file
@@ -192,7 +195,7 @@ def evaluate_iou(
 
 def train(config: Config, recipe: Recipe) -> None:
     """Runs (or resumes) training until config.epochs are done."""
-    device = _device(config.device)
+    device = device_of(config.device)
     cuda = device == "cuda"
     config.run_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(config.seed)  # the head's starting weights
@@ -275,11 +278,11 @@ def train(config: Config, recipe: Recipe) -> None:
             "val_iou": val_iou,
             "best_iou": best_iou,
             "seconds": round(time.monotonic() - began, 1),
-            "device": _device_name(device),
+            "device": device_name(device),
         }
         with (config.run_dir / LOG).open("a") as f:
             f.write(json.dumps(row) + "\n")
-        _save_atomic(
+        save_atomic(
             {
                 "model": model.state_dict(),
                 "optimiser": optimiser.state_dict(),

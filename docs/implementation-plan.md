@@ -395,7 +395,7 @@ rule holds: 2 candidates per experiment.
   sigmoid logits) read from rfdetr 1.12.1's export code. Test: the training
   module's dataset, resume and export flow (fake `rfdetr`); decoding maps boxes
   to photo pixels and keeps two classes for one query.
-- [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot, next to V5's Depth
+- [x] E3a `[CV]` exp: Depth Anything 3 Small zero-shot, next to V5's Depth
   Anything V2 Small, on NYUv2 test, nyuv2-val and v9 val, with the same
   per-image and global scale fits. Changed 2026-11-25 (option chosen: Colab-only
   accuracy): DA3's package (depth-anything-3 0.1.1) pins numpy\<2 and imports
@@ -442,7 +442,7 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
   probe, a two-layer depth decoder and the CenterNet head, all on one forward
   pass; save and load like `DinoFloor`. Test: output shapes; backbone frozen; a
   reloaded model gives the same outputs.
-- [ ] H4 `[CV]` feat(train): `minifsd.train.hydra`, joint training on v10
+- [x] H4 `[CV]` feat(train): `minifsd.train.hydra`, joint training on v10
   (floor, depth, boxes) plus COCO people (boxes only), with resume. Test: a CPU
   smoke run on generated frames writes a checkpoint and resumes; the loss falls;
   COCO samples add no floor or depth loss.
@@ -926,3 +926,11 @@ Add a row at the end of each session.
   V5's V2-Small 0.062 / 0.955 and 0.242 / 0.564: the newer model is slightly
   worse zero-shot here. nyuv2-val 0.078 / 0.930 and 0.258 / 0.505; v9 val 0.136
   / 0.811 and 0.419 / 0.475.
+- **2026-11-26** E3a done. AbsRel / delta1, per-image fit then global fit.
+  nyuv2-val: V2-Small 0.062 / 0.957 and 0.234 / 0.573; DA3-Small 0.078 / 0.930
+  and 0.258 / 0.505. v9 val: V2 0.105 / 0.877 and 0.452 / 0.441; DA3 0.136 /
+  0.811 and 0.419 / 0.475. Picked on nyuv2-val, V2-Small stays the depth model
+  (and E3b's teacher). DA3 is better only on sim with the global fit. E1b
+  RF-DETR Nano finished on Explorer (20 epochs, 34 min); to be scored. H4: the
+  E4 training loop (`minifsd.train.hydra`); floor.py's device and checkpoint
+  helpers made public for it.
