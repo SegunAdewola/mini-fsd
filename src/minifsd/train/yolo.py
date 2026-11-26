@@ -44,7 +44,7 @@ class Config:
     epochs: int = 40
     imgsz: int = 320
     batch: int = 64
-    workers: int = 2  # Colab's free tier has 2 CPU cores
+    workers: int = 2  # Colab's free tier has 2 CPU cores; Explorer jobs 8
     seed: int = 0
 
 
@@ -76,6 +76,9 @@ def train(config: Config) -> pathlib.Path:
 
     from ultralytics import YOLO  # AGPL-3.0, Colab only (ADR 0008)
 
+    # Before resuming too: the checkpoint points at the dataset on the
+    # session disk, which a new session (or Explorer node) starts without.
+    data = prepare(config)
     last = weights / "last.pt"
     if last.exists():
         try:
@@ -85,7 +88,6 @@ def train(config: Config) -> pathlib.Path:
             # dropped before the export.
             print(f"not resuming: {finished}")
     else:
-        data = prepare(config)
         YOLO(PRETRAINED).train(
             data=str(data),
             epochs=config.epochs,
@@ -120,6 +122,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--epochs", type=int, default=Config.epochs)
     parser.add_argument("--batch", type=int, default=Config.batch)
+    parser.add_argument("--workers", type=int, default=Config.workers)
     args = parser.parse_args(argv)
     onnx = train(
         Config(
@@ -129,6 +132,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             work_dir=args.work_dir,
             epochs=args.epochs,
             batch=args.batch,
+            workers=args.workers,
         )
     )
     print(f"exported: {onnx}")

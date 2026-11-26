@@ -1,6 +1,7 @@
 # ADR 0007: Train on Colab's free tier, not Explorer, for now
 
-- Status: Accepted (revisit if a run doesn't fit Colab's limits)
+- Status: Accepted; amended 2026-11-26 (Explorer now runs the training, see the
+  end)
 - Date: 2026-11-25
 - Plan step: T2
 
@@ -55,3 +56,15 @@ Train on Colab's free tier. Everything that matters lives outside the session:
   needed until the free tier proves too small.
 - **Training on the M1 (MPS).** No setup, but 8 GB shared memory and slow
   training; fine for smoke tests, too slow for real runs.
+
+## Amendment, 2026-11-26: Explorer takes over
+
+Colab's free GPU quota ran out on the first evening, 14 epochs into E1a, with
+"insufficient quota" and no stated time to reset. The Explorer smoke test then
+worked: an interactive job got a V100 (32 GB) within a minute. Training moves to
+Explorer, which costs nothing, has 8 h jobs on the `gpu` partition (T4 up to
+H200) and no idle timeout. The rules above still hold: the logic stays in
+`src/minifsd/train`, runs resume from checkpoints, and latency is measured only
+on the M1. Only the shell changes: `scripts/explorer/setup.sh` and a generic
+Slurm script, `scripts/explorer/train.sbatch`. Data goes to scratch with rsync
+instead of Drive. Colab stays as the fallback.

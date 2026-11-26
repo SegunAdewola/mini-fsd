@@ -145,6 +145,9 @@ def test_a_run_with_a_checkpoint_resumes_it(
     yolo.train(config)
     assert fake_ultralytics.calls[0] == ("load", str(weights / "last.pt"))
     assert fake_ultralytics.calls[1] == ("train", {"resume": True})
+    # A new session has an empty session disk: the dataset the checkpoint
+    # points at must be rebuilt before resuming.
+    assert (config.work_dir / "data.yaml").exists()
 
 
 def test_a_finished_run_only_exports(
@@ -184,3 +187,27 @@ def test_sources_parse_from_the_command_line() -> None:
         "v10": pathlib.Path("/a/train"),
         "coco": pathlib.Path("/b/train"),
     }
+
+
+def test_the_command_line_passes_workers_through(
+    tmp_path: pathlib.Path,
+    fake_ultralytics: type[FakeYolo],
+) -> None:
+    # Explorer jobs get 8 CPUs, Colab 2: the loader count is a flag.
+    config = _config(tmp_path)
+    yolo.main(
+        [
+            "--train",
+            *(f"{k}={v}" for k, v in config.train.items()),
+            "--val",
+            *(f"{k}={v}" for k, v in config.val.items()),
+            "--run-dir",
+            str(config.run_dir),
+            "--work-dir",
+            str(config.work_dir),
+            "--workers",
+            "8",
+        ]
+    )
+    args = next(a for kind, a in fake_ultralytics.calls if kind == "train")
+    assert args["workers"] == 8

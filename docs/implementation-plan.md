@@ -862,3 +862,14 @@ Add a row at the end of each session.
   DINOv2 v10 (latencies from different hours of the day; to be remeasured in one
   cool session, see above). Floor pick for T5: DINOv2 v10, pending real floor 15
   and the latency work in E6.
+- **2026-11-26** Colab's free quota ran out 14 epochs into E1a. Explorer smoke
+  test passed (V100 32 GB, driver CUDA 12.3), so training moves there (ADR 0007
+  amended): `scripts/explorer/setup.sh` makes two uv virtual envs in scratch
+  (training: CUDA 12.6 torch, which still has V100 kernels, plus our package,
+  ultralytics, rfdetr; DA3 on its own with numpy\<2 and xformers left out) and
+  `train.sbatch` runs any `minifsd.train` module as a Slurm job. The YOLO run
+  restarts rather than resumes: Ultralytics keeps Colab's absolute paths in
+  `last.pt`. Bug found writing the job command: `yolo.train` resumed without
+  rebuilding the dataset on the session disk, so any resume in a new session
+  would have failed; the resume test now checks for the dataset, and `train`
+  rebuilds it first. YOLO also takes `--workers` (8 on Explorer).
