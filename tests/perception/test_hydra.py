@@ -107,10 +107,10 @@ def test_the_predictor_answers_all_three_tasks_from_one_forward(
     calls: list[int] = []
     real = predictor._model.forward
 
-    def counted(x: torch.Tensor) -> hydra.Heads:
+    def counted(x: torch.Tensor, heads: tuple[str, ...]) -> hydra.Heads:
         calls.append(1)
-        heads: hydra.Heads = real(x)
-        return heads
+        out: hydra.Heads = real(x, heads)
+        return out
 
     monkeypatch.setattr(predictor._model, "forward", counted)
     rgb = np.zeros((300, 401, 3), np.uint8)

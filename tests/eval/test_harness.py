@@ -376,3 +376,63 @@ def test_the_da3_candidate_reads_colab_predictions_untimed(
     c = harness.make_candidate("depth-da3-small", device="cpu", threads=2)
     assert (c.name, c.task, c.timed) == ("depth-da3-small", "depth", False)
     np.testing.assert_allclose(c.predict(rgb), 0.5, rtol=1e-3)
+
+
+@pytest.mark.parametrize(
+    ("name", "task"),
+    [
+        ("hydra-floor", "floor"),
+        ("hydra-detect", "detect"),
+        ("hydra-depth", "depth"),
+        ("hydra-all", "floor"),
+    ],
+)
+def test_hydra_candidates_answer_their_task_from_one_model(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    task: str,
+) -> None:
+    # E4: one trained HydraNet scored per task; hydra-all times every head.
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.train import hydra as hydra_train
+
+    hydra_train.build_model(None).save(tmp_path / "hydranet")
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
+    c = harness.make_candidate(name, device="cpu", threads=1)
+    assert (c.name, c.task) == (name, task)
+    out = c.predict(np.zeros((240, 320, 3), np.uint8))
+    if task == "floor":
+        assert out.shape == (240, 320) and out.dtype == bool
+    elif task == "depth":
+        assert out.shape == (240, 320) and (out > 0).all()
+    else:
+        assert isinstance(out, list)
+
+
+def test_task_candidates_skip_the_heads_they_dont_need(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # hydra-floor is timed as floor alone; hydra-all pays for every head.
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from minifsd.perception import hydra
+    from minifsd.train import hydra as hydra_train
+
+    hydra_train.build_model(None).save(tmp_path / "hydranet")
+    monkeypatch.setattr(harness, "MODELS", tmp_path)
+    used: list[tuple[str, ...]] = []
+    real = hydra.Hydra.predict
+
+    def spy(
+        self: hydra.Hydra, rgb: np.ndarray, heads: tuple[str, ...]
+    ) -> object:
+        used.append(heads)
+        return real(self, rgb, heads)
+
+    monkeypatch.setattr(hydra.Hydra, "predict", spy)
+    rgb = np.zeros((240, 320, 3), np.uint8)
+    harness.make_candidate("hydra-floor", device="cpu", threads=1).predict(rgb)
+    harness.make_candidate("hydra-all", device="cpu", threads=1).predict(rgb)
+    assert used == [("floor",), ("floor", "depth", "detect")]

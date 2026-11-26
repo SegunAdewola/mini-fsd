@@ -60,11 +60,11 @@ MODELS = pathlib.Path("data/models")
 # E1a's ONNX export (ADR 0008), copied from the run's weights/ on Drive.
 YOLO_ONNX = pathlib.Path("data/models/detect-yolo26n/best.onnx")
 # E1b's ONNX export, copied from the run folder on Drive.
-RFDETR_ONNX = pathlib.Path(
-    "data/models/detect-rfdetr-nano/inference_model.onnx"
-)
+RFDETR_ONNX = pathlib.Path("data/models/detect-rfdetr-nano/rfdetr-nano.onnx")
 # E3a: DA3-Small's depth maps, made on Colab (minifsd.train.da3_predict).
 DA3_PREDICTIONS = pathlib.Path("data/models/da3-small-predictions.npz")
+# E4's HydraNet, a run's best/ folder copied to MODELS/HYDRA_DIR.
+HYDRA_DIR = "hydranet"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -394,6 +394,29 @@ def _depth_da3(device: str, threads: int, input_size: int | None) -> Candidate:
     return Candidate("depth-da3-small", "depth", model.predict, timed=False)
 
 
+def _hydra(
+    device: str,
+    threads: int,
+    input_size: int | None,
+    name: str,
+    heads: tuple[str, ...],
+    task: Task,
+) -> Candidate:
+    import torch
+
+    from minifsd.perception import hydra
+
+    if input_size is not None:
+        raise ValueError(f"{name} runs at 322 x 238; no input_size")
+    torch.set_num_threads(threads)
+    model = hydra.Hydra(MODELS / HYDRA_DIR, device=device)
+
+    def predict(rgb: np.ndarray) -> Any:
+        return model.predict(rgb, heads)[task]
+
+    return Candidate(name, task, predict)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -413,6 +436,23 @@ CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "detect-yolo26n": _detect_yolo,
     "detect-rfdetr-nano": _detect_rfdetr,
     "depth-da3-small": _depth_da3,
+    # E4: one HydraNet scored per task, and hydra-all, which runs every
+    # head (returning the floor mask) so its latency is the shared cost.
+    "hydra-floor": functools.partial(
+        _hydra, name="hydra-floor", heads=("floor",), task="floor"
+    ),
+    "hydra-depth": functools.partial(
+        _hydra, name="hydra-depth", heads=("depth",), task="depth"
+    ),
+    "hydra-detect": functools.partial(
+        _hydra, name="hydra-detect", heads=("detect",), task="detect"
+    ),
+    "hydra-all": functools.partial(
+        _hydra,
+        name="hydra-all",
+        heads=("floor", "depth", "detect"),
+        task="floor",
+    ),
 }
 
 

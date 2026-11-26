@@ -30,7 +30,6 @@ from minifsd.train import adapters, yolo
 
 RESUME = "last.ckpt"
 BEST = "checkpoint_best_total.pth"
-ONNX = "inference_model.onnx"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -63,11 +62,12 @@ def train(config: Config) -> pathlib.Path:
     """Trains, resumes or just exports, as far as the run has got.
 
     Returns:
-        The exported ONNX model, run_dir/inference_model.onnx.
+        The exported ONNX model in run_dir. rfdetr names it after the model
+        (1.12.1: rfdetr-nano.onnx), so any .onnx there means "done".
     """
-    onnx = config.run_dir / ONNX
-    if onnx.exists():
-        return onnx
+    exported = sorted(config.run_dir.glob("*.onnx"))
+    if exported:
+        return exported[0]
 
     from rfdetr import RFDETRNano  # Colab only
 
@@ -85,11 +85,11 @@ def train(config: Config) -> pathlib.Path:
         args["resume"] = str(last)
     RFDETRNano().train(**args)
     best = RFDETRNano.from_checkpoint(str(config.run_dir / BEST))
-    best.export(
+    onnx = best.export(
         output_dir=str(config.run_dir),
         shape=(config.resolution, config.resolution),
     )
-    return onnx
+    return pathlib.Path(onnx)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

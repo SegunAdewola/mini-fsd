@@ -20,6 +20,7 @@ import dataclasses
 import json
 import math
 import pathlib
+from typing import Any
 
 import cv2
 import numpy as np
@@ -41,9 +42,12 @@ HEADS_FILE = "heads.pt"
 SETTINGS_FILE = "hydra.json"
 
 
+TASKS = ("floor", "depth", "detect")
+
+
 @dataclasses.dataclass(frozen=True)
 class Heads:
-    """One forward pass's outputs."""
+    """One forward pass's outputs; a head not asked for is None."""
 
     floor: torch.Tensor  # (B, 2, 17, 23) logits
     log_depth: torch.Tensor  # (B, 1, 34, 46)
@@ -106,8 +110,18 @@ class HydraNet(nn.Module):
         self.backbone.eval()
         return self
 
-    def forward(self, pixel_values: torch.Tensor) -> Heads:
-        """(B, 3, 238, 322) input to every head's output."""
+    def forward(
+        self, pixel_values: torch.Tensor, heads: tuple[str, ...] = TASKS
+    ) -> Heads:
+        """(B, 3, 238, 322) input to the asked-for heads' outputs.
+
+        Args:
+            pixel_values: Preprocessed input.
+            heads: Which of TASKS to run; the others come back as None, and
+                the dense neck runs only for depth or detect. Training uses
+                all three; a single-task candidate skips the rest, so its
+                latency is its own.
+        """
         b, _, h, w = pixel_values.shape
         layers = int(self.settings["layers"])
         with torch.no_grad():
@@ -120,20 +134,24 @@ class HydraNet(nn.Module):
             ]
         x = torch.cat(tokens, dim=-1).transpose(1, 2)
         x = x.reshape(b, -1, h // floor_dino.PATCH, w // floor_dino.PATCH)
-        dense = functional.interpolate(
-            self.neck_in(x),
-            size=(h // centernet.STRIDE, w // centernet.STRIDE),
-            mode="bilinear",
-            align_corners=False,
-        )
-        dense = self.neck_out(dense)
-        return Heads(
-            floor=self.floor_head(x),
-            log_depth=self.depth_head(dense),
-            heatmap=self.heatmap_head(dense),
-            size=self.size_head(dense),
-            offset=self.offset_head(dense),
-        )
+        none: Any = None
+        floor = self.floor_head(x) if "floor" in heads else none
+        log_depth = heatmap = size = offset = none
+        if "depth" in heads or "detect" in heads:
+            dense = functional.interpolate(
+                self.neck_in(x),
+                size=(h // centernet.STRIDE, w // centernet.STRIDE),
+                mode="bilinear",
+                align_corners=False,
+            )
+            dense = self.neck_out(dense)
+            if "depth" in heads:
+                log_depth = self.depth_head(dense)
+            if "detect" in heads:
+                heatmap = self.heatmap_head(dense)
+                size = self.size_head(dense)
+                offset = self.offset_head(dense)
+        return Heads(floor, log_depth, heatmap, size, offset)
 
     def save(self, folder: pathlib.Path) -> None:
         """Writes backbone and heads, so loading needs no download."""
@@ -173,27 +191,43 @@ class Hydra:
         self._device = device
         self._model = HydraNet.load(path).to(device).eval()
 
-    def predict_all(
-        self, rgb: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, list[detection.Detection]]:
-        """One forward pass to every task's answer, at the photo's size.
+    def predict(
+        self, rgb: np.ndarray, heads: tuple[str, ...]
+    ) -> dict[str, Any]:
+        """One forward pass, only the asked-for heads, at the photo's size.
 
         Returns:
-            (H, W) bool floor mask, (H, W) relative disparity (1 / depth),
-            and detections in the photo's pixels.
+            {"floor": (H, W) bool mask, "depth": (H, W) relative disparity
+            (1 / depth), "detect": detections in the photo's pixels}, for
+            the heads asked for.
         """
         x = torch.from_numpy(floor_dino.preprocess(rgb)).to(self._device)
         with torch.inference_mode():
-            out = self._model(x)
+            out = self._model(x, heads)
         h, w = rgb.shape[:2]
-        floor = floor_segformer.mask_from_logits(
-            out.floor[0].float().cpu().numpy(), h, w
-        )
-        log_depth = out.log_depth[0, 0].float().cpu().numpy()
-        depth = cv2.resize(
-            np.exp(log_depth), (w, h), interpolation=cv2.INTER_LINEAR
-        )
-        disparity = 1.0 / np.maximum(depth, 1e-6)
+        answers: dict[str, Any] = {}
+        if "floor" in heads:
+            answers["floor"] = floor_segformer.mask_from_logits(
+                out.floor[0].float().cpu().numpy(), h, w
+            )
+        if "depth" in heads:
+            log_depth = out.log_depth[0, 0].float().cpu().numpy()
+            depth = cv2.resize(
+                np.exp(log_depth), (w, h), interpolation=cv2.INTER_LINEAR
+            )
+            answers["depth"] = 1.0 / np.maximum(depth, 1e-6)
+        if "detect" in heads:
+            answers["detect"] = self._boxes(out, w, h)
+        return answers
+
+    def predict_all(
+        self, rgb: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, list[detection.Detection]]:
+        """Every task from one forward pass: floor, disparity, boxes."""
+        a = self.predict(rgb, TASKS)
+        return a["floor"], a["depth"], a["detect"]
+
+    def _boxes(self, out: Heads, w: int, h: int) -> list[detection.Detection]:
         found = centernet.decode(
             torch.sigmoid(out.heatmap[0]).float().cpu().numpy(),
             out.size[0].float().cpu().numpy(),
@@ -217,4 +251,4 @@ class Hydra:
                     f.score,
                 )
             )
-        return floor, disparity, dets
+        return dets

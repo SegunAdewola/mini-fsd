@@ -446,7 +446,7 @@ Steps written 2026-11-26 for E4; the rest when the photos are in.
   (floor, depth, boxes) plus COCO people (boxes only), with resume. Test: a CPU
   smoke run on generated frames writes a checkpoint and resumes; the loss falls;
   COCO samples add no floor or depth loss.
-- [ ] H5 `[CV]` feat(eval): harness candidates `hydra-floor`, `hydra-detect`,
+- [x] H5 `[CV]` feat(eval): harness candidates `hydra-floor`, `hydra-detect`,
   `hydra-depth`, plus `hydra-all` (all heads, one forward, timed) for E4's
   latency question. Test: each returns its task's output; the shared forward
   runs once per image.
@@ -934,3 +934,10 @@ Add a row at the end of each session.
   RF-DETR Nano finished on Explorer (20 epochs, 34 min); to be scored. H4: the
   E4 training loop (`minifsd.train.hydra`); floor.py's device and checkpoint
   helpers made public for it.
+- **2026-11-26** H5: HydraNet harness candidates `hydra-floor`, `-depth`,
+  `-detect` (each runs only its own head, so its latency is its own) and
+  `hydra-all` (every head, one forward: E4's shared cost). Surprise: rfdetr
+  1.12.1 names its export `rfdetr-nano.onnx`, not `inference_model.onnx` as its
+  naming code's default suggested, so a resubmitted E1b would have retrained;
+  `rf_detr.train` now takes the name `export()` returns and treats any `.onnx`
+  in the run folder as done.

@@ -63,7 +63,8 @@ class FakeNano:
 
     def export(self, **kwargs: Any) -> pathlib.Path:
         FakeNano.calls.append(("export", kwargs))
-        onnx = pathlib.Path(kwargs["output_dir"]) / "inference_model.onnx"
+        # rfdetr 1.12.1 names the file after the model (seen on Explorer).
+        onnx = pathlib.Path(kwargs["output_dir"]) / "rfdetr-nano.onnx"
         onnx.write_bytes(b"onnx")
         return onnx
 
@@ -106,7 +107,7 @@ def test_a_fresh_run_trains_at_320_then_exports_the_best_checkpoint(
         config.run_dir / "checkpoint_best_total.pth"
     )
     assert fake_rfdetr.calls[2][1]["shape"] == (320, 320)
-    assert onnx == config.run_dir / "inference_model.onnx"
+    assert onnx == config.run_dir / "rfdetr-nano.onnx"
 
 
 def test_a_run_with_a_checkpoint_resumes_it(
@@ -126,6 +127,6 @@ def test_an_exported_run_is_left_alone(
 ) -> None:
     config = _config(tmp_path)
     config.run_dir.mkdir(parents=True)
-    (config.run_dir / "inference_model.onnx").write_bytes(b"onnx")
-    assert rf_detr.train(config) == config.run_dir / "inference_model.onnx"
+    (config.run_dir / "rfdetr-nano.onnx").write_bytes(b"onnx")
+    assert rf_detr.train(config) == config.run_dir / "rfdetr-nano.onnx"
     assert fake_rfdetr.calls == []
