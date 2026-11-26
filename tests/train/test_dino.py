@@ -5,6 +5,9 @@ A tiny random DINOv2 on generated frames, on CPU. Needs torch:
     pixi run -e cv pytest tests/train/test_dino.py
 """
 
+from __future__ import annotations  # names below exist only with torch
+
+import importlib.util
 import json
 import pathlib
 
@@ -14,11 +17,21 @@ import pytest
 
 from minifsd.data import boxes
 
-torch = pytest.importorskip("torch")
-pytest.importorskip("transformers")
+# A skip mark, not a module-level importorskip: ROS's launch_testing plugin
+# imports every test file and lets a module-level skip (a BaseException)
+# abort collection of the whole folder in the default env.
+HAS_TORCH = all(
+    importlib.util.find_spec(name) is not None
+    for name in ("torch", "transformers")
+)
+pytestmark = pytest.mark.skipif(
+    not HAS_TORCH, reason="needs torch and transformers (the cv env)"
+)
+if HAS_TORCH:
+    import torch
 
-from minifsd.perception import floor_dino  # noqa: E402  (needs torch)
-from minifsd.train import dino, floor  # noqa: E402
+    from minifsd.perception import floor_dino
+    from minifsd.train import dino, floor
 
 N_FRAMES = 12
 
