@@ -16,7 +16,9 @@ set -euo pipefail
 
 readonly OUT="runs/harness/latency.jsonl"
 readonly COOL_SECONDS="${COOL_SECONDS:-60}"
-readonly MAX_LOAD="${MAX_LOAD:-1.5}"
+# An idle M1 with VS Code open sits near a load of 2 (8 cores), and runs at
+# that load matched the earlier clean numbers; 1.5 waited forever.
+readonly MAX_LOAD="${MAX_LOAD:-2.5}"
 readonly NYU="nyuv2-val"
 readonly SIM="coco:data/sim/v10/val"
 
