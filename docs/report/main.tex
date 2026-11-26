@@ -41,9 +41,46 @@ Northeastern University}}
 % to E3 comparisons, the furniture finding (D11, E2c).
 
 \section{Related Work}
-% Short: domain randomization (Tobin et al.), foundation features for
-% transfer (DINOv2/DINOv3), real-time detectors (YOLO26, RF-DETR), efficient
-% segmentation (SegFormer), monocular depth (Depth Anything V2 and 3).
+
+\emph{Synthetic data.} Domain randomization~\cite{tobin2017domain} trains on
+renders whose textures, lights and camera vary so widely that the real world
+looks like one more variation. Structured domain
+randomization~\cite{prakash2019structured} keeps the variation but places
+objects where they would plausibly be. Our data engine does both: looks and
+cameras are random, while doors, signs and furniture sit where a building
+puts them. E2c adds a lesson of its own, that the randomization has to cover
+the shortcuts a network would otherwise take, such as texture standing in for
+floor.
+
+\emph{Foundation features.} DINOv2~\cite{oquab2023dinov2} learns image
+features without labels, and its paper shows that a linear probe on the
+frozen features does well on segmentation and depth. DINOv3~\cite{simeoni2025dinov3}
+scales the recipe and improves those dense features. We use DINOv2 frozen,
+as E2's test of whether such features carry from sim to real rooms better
+than a network fine-tuned on sim, here SegFormer~\cite{xie2021segformer}, an
+efficient transformer for segmentation.
+
+\emph{Detection.} YOLO26~\cite{jocher2026yolo26} is the current Ultralytics
+detector, built around an end-to-end head for fast CPU inference.
+RF-DETR~\cite{robinson2026rfdetr} is a real-time detection transformer on a
+DINOv2 backbone, sized by architecture search. CenterNet~\cite{zhou2019objects}
+treats each object as the peak of a heatmap at its centre; its simplicity is
+why HydraNet-lite's box head uses it.
+
+\emph{Depth.} MiDaS~\cite{ranftl2022midas} trains on mixed datasets with a
+loss that ignores scale and shift, which makes relative depth the common
+currency of zero-shot models. Depth Anything V2~\cite{yang2024depthv2}
+trains a teacher on synthetic data, labels real images with it, and distils
+small students; E3b follows the same path at a much smaller size, after
+Hinton et al.'s distillation~\cite{hinton2015distilling}. Depth Anything
+3~\cite{lin2026depth3} recovers geometry from any number of views; we use it
+on single images.
+
+\emph{Shared backbones.} Tesla's HydraNet, known only from public talks, runs
+many task heads on one backbone to save computation. Kendall
+et~al.~\cite{kendall2018multitask} weigh such tasks' losses by learned
+uncertainty rather than by hand. E4 asks the HydraNet question at a small
+scale, on a CPU budget.
 
 \section{System}
 \label{sec:system}
