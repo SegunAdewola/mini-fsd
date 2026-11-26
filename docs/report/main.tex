@@ -392,7 +392,8 @@ times the parameters. We did not profile why; one likely part is that
 SegFormer's decoder works on a feature map a quarter of the input's size,
 while DINOv2's head is one convolution on a $17\times23$ grid. By the design's rule no learned model
 qualifies as it stands; DINOv2 on v10 is the pick to carry into the edge
-work (E6), which has to cut its latency by 40\%.
+work (E6). The budget covers floor, boxes and depth together, so E6 has to
+do more than bring this one model under 50\,ms (Section~\ref{sec:e4}).
 
 \begin{figure}[t]
 \centering
@@ -459,8 +460,63 @@ does not change the license of the trained model.
 
 \subsection{E3: Depth}
 \label{sec:e3}
-% Depth Anything V2 Small (V5) against DA3 Small (accuracy only, run on
-% Colab) on NYUv2 test and v9 val; E3b if it lands.
+
+Depth feeds the costmap: each pixel with a depth becomes a point in front of
+the robot, and points above the floor become obstacles. E3 first compares
+two zero-shot models used as they come. \emph{Depth Anything
+V2-Small}~\cite{yang2024depthv2} runs at its training resolution, a 518\,px
+short side. \emph{Depth Anything 3-Small}~\cite{lin2026depth3} needs
+libraries that clash with the rest of our environment, so it ran once on a
+GPU and the harness looks its predictions up by image; it is scored for
+accuracy but not timed.
+
+\begin{table*}[t]
+\caption{E3 depth. $\delta_1$ and AbsRel on 200 held-out NYUv2 images with
+one global scale and shift (what the robot could use) and with a fit per image
+(an upper bound), and $\delta_1$ per image on the v9 sim validation set.
+AbsRel is lower-better. Latency on the M1, two threads; Depth Anything 3 ran
+on a GPU and is untimed. $^\dagger$: on the Pareto front of global $\delta_1$
+against latency.}
+\label{tab:e3}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{tables/e3.tex}
+\end{table*}
+
+On real rooms V2-Small is the better of the two (Table~\ref{tab:e3}): AbsRel
+0.062 against 0.078 with a fit per image, and 0.234 against 0.258 with the
+global fit. On sim the global fit favours Depth Anything 3. We pick on
+nyuv2-val, so V2-Small stays. The more useful finding is the gap between the
+two fits. Fitted per image, V2-Small is off by about 6\% on average;
+with one scale and shift for all images, its error is nearly four times
+larger, because the scale of relative depth drifts from one image to the
+next. A deployed robot only has the global fit, unless it recovers scale some
+other way, for example from the known height of its camera above the floor.
+
+Neither model is close to the budget. V2-Small takes 841\,ms per image on the
+M1, so E3b trains a small student from it. The student is SegFormer-B0 with
+one output channel at $160\times120$, a quarter of E2's pixels. It learns
+from v10's exact depth and from V2-Small's predictions on 495 NYUv2 training
+images, with no human depth labels, under the scale-and-shift invariant loss
+of MiDaS~\cite{ranftl2022midas}. Our first version aligned each prediction to
+its target by least squares instead. That fit accepts a
+negative scale, so the loss could not tell disparity from its inverse, and
+the first student learned it upside down: larger values meant farther, on 118
+of 120 real images. The harness's own fit hid this, since it too can flip
+the sign. MiDaS's version shifts each map by its median and divides by its
+mean absolute deviation, which keeps the sign, and the student in
+Table~\ref{tab:e3} is trained with it.
+
+With the global fit, the one that counts on the robot, the student comes
+close to its teacher: $\delta_1$ 0.561 against 0.573 and AbsRel 0.242
+against 0.234, in 86\,ms instead of 841. Fitted per image it falls further
+behind (AbsRel 0.137 against 0.062), so its maps are less accurate in shape,
+but that shape error is small next to the scale error both models carry
+without a per-image fit. On sim the student beats its teacher (per-image
+$\delta_1$ 0.942 against 0.877), as it should, having trained on v10's
+exact depth. It is the depth pick, at ten times the teacher's speed, though
+still over the budget on its own.
 
 \subsection{E4: One Backbone or Three Models}
 \label{sec:e4}
