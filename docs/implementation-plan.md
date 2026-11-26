@@ -879,3 +879,10 @@ Add a row at the end of each session.
   runs now agree to 0.1 ms and p95 sits within 6% of p50, so the earlier spread
   was heat. These are the report's E2 latencies. Both models are over the 50 ms
   budget, DINOv2 by 1.6x; E6 (ONNX, INT8, smaller input) must close it.
+- **2026-11-26** Report: E2 section drafted with its table, the Pareto plot and
+  an overlay figure, all generated (`minifsd.eval.report --latex --plot`,
+  `tools/report_e2_overlays.py`). Floor runs now log precision and recall. A
+  rerun for those gave noisy latencies again (DINOv2 v9 109 ms against v10 89
+  ms, same architecture; an upload was running), so the report takes latency
+  only from `runs/harness/latency.jsonl`, the clean cool-session runs
+  (`--latency-log`); accuracy still comes from the latest run.

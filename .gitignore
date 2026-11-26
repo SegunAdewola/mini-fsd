@@ -57,3 +57,6 @@ uv.lock
 # The report PDF changes on every build; commit the final one at M6 with
 # git add -f docs/report/main.pdf.
 /docs/report/main.pdf
+# Figures built from dataset images (NYUv2, sim renders) stay out of the
+# public repo (CLAUDE.md); tools/report_*.py rebuild them.
+/docs/report/figures/e2-overlays.pdf

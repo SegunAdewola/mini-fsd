@@ -1,0 +1,11 @@
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+Model & IoU nyuv2-val & Precision nyuv2-val & Recall nyuv2-val & IoU v9 val & IoU v10 val & p50 ms & p95 ms \\
+\midrule
+DINOv2-S frozen, v10$^\dagger$ & 0.516 & 0.747 & 0.625 & 0.955 & 0.952 & 82 & 87 \\
+SegFormer-B0, v10 & 0.482 & 0.545 & 0.807 & 0.992 & 0.991 & 130 & 149 \\
+DINOv2-S frozen, v9$^\dagger$ & 0.466 & 0.715 & 0.573 & 0.956 & 0.950 & 82 & 86 \\
+SegFormer-B0, v9 & 0.367 & 0.421 & 0.742 & 0.993 & 0.988 & 135 & 157 \\
+Classical baseline$^\dagger$ & 0.333 & 0.454 & 0.554 & 0.466 & 0.473 & 3 & 4 \\
+\bottomrule
+\end{tabular}

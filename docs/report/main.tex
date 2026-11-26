@@ -248,10 +248,83 @@ no other is both at least as accurate and at least as fast.
 
 \subsection{E2: Floor Segmentation}
 \label{sec:e2}
-% SegFormer-B0 fine-tuned against frozen DINOv2 ViT-S/14 with a linear probe,
-% trained on v9, then both on v10 (E2c). Table from minifsd.eval.report:
-% nyuv2-val, v9 val, v10 val IoU, precision and recall, p50 latency. The
-% figure: accuracy against latency. Overlays of the counter/bed failure.
+
+Floor segmentation decides where the robot may drive, so it carries the
+project's main success criterion. E2 compares a network fine-tuned end to end
+on sim against frozen foundation features, the design's main hypothesis being
+that the second transfers to real rooms better.
+
+\emph{SegFormer-B0}~\cite{xie2021segformer} starts from its ImageNet encoder
+(3.7\,M parameters) with a new two-class head and trains end to end at
+$320\times240$: AdamW, learning rate $6\times10^{-5}$ on the encoder and ten
+times that on the head, decayed linearly over 20 epochs, with horizontal flips
+as the only augmentation, since the data engine already randomizes looks and
+cameras. \emph{DINOv2-S}~\cite{oquab2023dinov2} keeps its ViT-S/14 backbone
+frozen. Only the DINOv2 paper's linear probe trains: batch norm and a
+$1\times1$ convolution on the patch tokens of the last four blocks, 6{,}146
+weights in all, for 10 epochs at $238\times322$ (a $17\times23$ patch grid).
+DINOv3~\cite{simeoni2025dinov3} was the design's first choice; its weights
+are gated, so DINOv2 stands in. Each model trained in under 30 minutes on a
+T4.
+
+\begin{table*}[t]
+\caption{E2 floor segmentation. IoU, precision and recall on 200 held-out
+NYUv2 images; IoU on the sim validation sets; latency on the M1 with two
+threads. $^\dagger$: on the Pareto front of nyuv2-val IoU against latency.}
+\label{tab:e2}
+\centering
+\small
+\input{tables/e2.tex}
+\end{table*}
+
+Table~\ref{tab:e2} has the results. On sim validation the fine-tuned network
+wins clearly, 0.99 IoU against 0.96. On real rooms the order flips: trained on
+v9, SegFormer reaches 0.367, barely above the classical region-growing
+baseline at 0.333, while frozen DINOv2 reaches 0.467. Precision shows why.
+SegFormer marked 21\% of each image as floor when the true share is 11\%, and
+only 42\% of what it called floor was floor. Figure~\ref{fig:e2-overlays}
+shows where the extra floor went: a kitchen counter, a bed, and shelves over a
+desk. In
+v9 every floor was textured and every obstacle a flat colour, and SegFormer
+learned that shortcut. DINOv2's frozen features could not learn it as
+readily; its errors went the other way, missing floor rather than inventing
+it.
+
+That failure led to v10 (Section~\ref{sec:data}), and retraining both models
+on it is E2c. SegFormer gained the most, from 0.367 to 0.482 IoU and from
+0.42 to 0.55 precision. DINOv2 rose from 0.467 to 0.516, with precision and
+recall both higher, and stays the best model on real rooms. Sim scores
+hardly moved. The furniture taught the models something the sim validation
+set could not measure.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/e2-overlays.pdf}
+\caption{Floor predictions on three held-out NYUv2 images. Blue: floor found.
+Orange: floor called where there is none. Unshaded: floor missed. Trained on
+v9, SegFormer calls a counter, a bed and desk shelves floor (the third room
+has no floor in view). Trained on v10, with furniture, it does so less, and
+frozen DINOv2 on v10 less again, though not on every surface.}
+\label{fig:e2-overlays}
+\end{figure*}
+
+No learned model meets the 50\,ms budget yet. DINOv2-S takes 82\,ms per image
+and SegFormer-B0 130--135\,ms, against 3\,ms for the classical baseline
+(Figure~\ref{fig:e2-front}). DINOv2 is the faster of the two despite six
+times the parameters. We did not profile why; one likely part is that
+SegFormer's decoder works on a feature map a quarter of the input's size,
+while DINOv2's head is one convolution on a $17\times23$ grid. By the design's rule no learned model
+qualifies as it stands; DINOv2 on v10 is the pick to carry into the edge
+work (E6), which has to cut its latency by 40\%.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/e2-front.pdf}
+\caption{E2: floor IoU on nyuv2-val against median latency on the M1 (log
+scale). Filled points and the steps are the Pareto front; the dashed line is
+the 50\,ms budget.}
+\label{fig:e2-front}
+\end{figure}
 
 \subsection{E1: Detection}
 % YOLO26n against RF-DETR Nano at 320 px on v10 plus COCO people; mAP at 0.5
