@@ -57,6 +57,8 @@ VAL_IMAGES = 200
 SEGFORMER_DIR = pathlib.Path("data/models/floor-segformer-b0")
 # E2b's best checkpoint (backbone and head), from the run's best/ folder.
 DINO_DIR = pathlib.Path("data/models/floor-dinov2-s")
+# E1a's ONNX export (ADR 0008), copied from the run's weights/ on Drive.
+YOLO_ONNX = pathlib.Path("data/models/detect-yolo26n/best.onnx")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -340,6 +342,17 @@ def _floor_dino(device: str, threads: int, input_size: int | None) -> Candidate:
     return Candidate("floor-dinov2-s", "floor", model.predict)
 
 
+def _detect_yolo(
+    device: str, threads: int, input_size: int | None
+) -> Candidate:
+    from minifsd.perception import detect_onnx
+
+    if device != "cpu" or input_size is not None:
+        raise ValueError("detect-yolo26n runs on the CPU at its export size")
+    model = detect_onnx.OnnxDetector(YOLO_ONNX, threads)
+    return Candidate("detect-yolo26n", "detect", model.predict)
+
+
 # Name -> factory. Factories import their libraries, so the harness loads
 # only the one being tested. M3 adds the trained models here.
 # Factories take (device, threads, input_size); input_size is the model's
@@ -349,6 +362,7 @@ CANDIDATES: dict[str, Callable[[str, int, int | None], Candidate]] = {
     "depth-anything-v2-small": _depth_anything,
     "floor-segformer-b0": _floor_segformer,
     "floor-dinov2-s": _floor_dino,
+    "detect-yolo26n": _detect_yolo,
 }
 
 

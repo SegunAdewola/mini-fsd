@@ -817,3 +817,10 @@ Add a row at the end of each session.
   files now use a `skipif` mark and import torch only when it is there. The core
   suite went from 359 to 382 tests; nothing that came back fails. Rule from
   here: no module-level `importorskip`.
+- **2026-11-25** onnxruntime 1.32 added to the `cv` env (asked and agreed): it
+  runs exported detectors on the M1, so both E1 detectors are timed in the same
+  runtime, and E6 and the demo need it anyway. No second OpenCV came with it.
+  `minifsd.perception.detect_onnx` letterboxes a photo into the export's square
+  and maps end-to-end rows (x1, y1, x2, y2, score, class) back to photo pixels;
+  the harness candidate is `detect-yolo26n`. The (1, N, 6) output shape is
+  YOLO26's documented end-to-end export; the first real export confirms it.

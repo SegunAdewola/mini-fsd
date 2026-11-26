@@ -289,3 +289,25 @@ def test_the_dino_candidate_loads_a_checkpoint_and_masks_floor(
     assert (c.name, c.task) == ("floor-dinov2-s", "floor")
     mask = c.predict(np.zeros((240, 320, 3), np.uint8))
     assert mask.shape == (240, 320) and mask.dtype == bool
+
+
+def test_the_yolo_candidate_runs_the_exported_model_under_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # E1a: the ONNX export, run by ONNX Runtime with the harness's threads.
+    from minifsd.perception import detect_onnx
+
+    opened: list[tuple[pathlib.Path, int]] = []
+
+    class Fake:
+        def __init__(self, path: pathlib.Path, threads: int) -> None:
+            opened.append((path, threads))
+
+        def predict(self, rgb: np.ndarray) -> list[object]:
+            return []
+
+    monkeypatch.setattr(detect_onnx, "OnnxDetector", Fake)
+    c = harness.make_candidate("detect-yolo26n", device="cpu", threads=2)
+    assert (c.name, c.task) == ("detect-yolo26n", "detect")
+    assert opened == [(harness.YOLO_ONNX, 2)]
+    assert c.predict(np.zeros((240, 320, 3), np.uint8)) == []
