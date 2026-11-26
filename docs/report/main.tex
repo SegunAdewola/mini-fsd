@@ -404,8 +404,57 @@ the 50\,ms budget.}
 \end{figure}
 
 \subsection{E1: Detection}
-% YOLO26n against RF-DETR Nano at 320 px on v10 plus COCO people; mAP at 0.5
-% per class on v10 val and COCO people val; latency through ONNX Runtime.
+\label{sec:e1}
+
+The detector finds doors and room signs for the mission, and obstacles and
+people for the costmap. E1 compares a convolutional detector with a
+transformer of about the same size class. \emph{YOLO26n}~\cite{jocher2026yolo26}
+is the smallest model of the current Ultralytics family. \emph{RF-DETR
+Nano}~\cite{robinson2026rfdetr} is a detection transformer that sits on a
+DINOv2 backbone. Both start from their COCO weights and train on the same
+data: v10 train plus the 5{,}000 COCO person images, four classes, at
+$320\times320$. YOLO26n trained for 40 epochs (9 minutes on a V100) and
+RF-DETR Nano for 20 (34 minutes), each with its library's default recipe.
+
+Both are exported to ONNX and scored through ONNX Runtime on the M1 with the
+same harness, so neither gets its own runtime. They differ in what the export
+leaves to us. YOLO26n's export kept the raw head, 2{,}100 candidate boxes
+with class scores, so our decoder runs class-aware non-maximum suppression at
+IoU 0.7, as Ultralytics' own validation does. RF-DETR returns 300 query boxes
+and needs no suppression; it takes a stretched, not letterboxed, input.
+
+\begin{table*}[t]
+\caption{E1 detection. mAP at IoU 0.5, overall and per class, on the v10 sim
+validation set and on 500 held-out COCO person images; latency on the M1 with
+two threads through ONNX Runtime. $^\dagger$: on the Pareto front of v10 val
+mAP against latency.}
+\label{tab:e1}
+\centering
+\small
+\input{tables/e1.tex}
+\end{table*}
+
+Table~\ref{tab:e1} has the results. On sim both are near the ceiling:
+RF-DETR reaches 0.962 mAP and YOLO26n 0.933, and every class is above 0.89
+for both. COCO is where they part. RF-DETR finds people at 0.806 AP against
+YOLO26n's 0.655, and real furniture at 0.437 against 0.158. Obstacles on COCO
+are chairs, couches and tables photographed in real rooms, and the training
+mix did include 5{,}000 such images, so YOLO26n saw real furniture too. It
+still learned v10's boxes and tables far better than COCO's. This matches E2,
+where the model resting on DINOv2 features also carried over to real images
+better than the one trained end to end.
+
+% LATENCY: replace both numbers from latency.jsonl after scripts/latency.sh.
+The price is speed. YOLO26n runs in about 27\,ms per image, inside the 50\,ms
+budget on its own, and RF-DETR Nano in about 245\,ms, nine times slower and
+five times over the budget. By the design's rule YOLO26n is the pick. The gap
+on real people is the cost of that choice, and it is the reason the real
+photos (Section~\ref{sec:real}) report person and obstacle recall separately.
+COCO has no door or sign class, so doors in COCO photos were trained as
+background; whether that hurts door AP on real hallways is also a question
+for the photos. YOLO26n is AGPL-3.0, while the rest of the project is
+Apache-2.0; exporting to ONNX keeps Ultralytics' code out of our runtime but
+does not change the license of the trained model.
 
 \subsection{E3: Depth}
 \label{sec:e3}
@@ -413,6 +462,7 @@ the 50\,ms budget.}
 % Colab) on NYUv2 test and v9 val; E3b if it lands.
 
 \subsection{Real Photos}
+\label{sec:real}
 % Floor 15 for model choice, floors 14 and 2 used once for final numbers
 % (P1 to P5). Fallback stated if campus access slipped.
 
