@@ -159,3 +159,61 @@ def test_a_class_slot_beyond_our_categories_is_ignored() -> None:
     logits = np.full((1, len(boxes.CATEGORIES) + 1), -10.0, np.float32)
     logits[0, -1] = _logit(0.99)  # an extra slot some exports carry
     assert detect_onnx.decode_detr(dets, logits, 100, 100, 0.5) == []
+
+
+# YOLO's raw head (E1a's real export): (1, 4 + C, N), centre x, centre y,
+# width, height in letterboxed pixels, then per-class scores. Needs NMS.
+
+
+def _raw(*boxes: tuple[float, float, float, float, int, float]) -> np.ndarray:
+    """Raw columns from (cx, cy, w, h, class, score) tuples."""
+    out = np.zeros((4 + len(boxes_lib_categories()), len(boxes)), np.float32)
+    for i, (cx, cy, w, h, cls, score) in enumerate(boxes):
+        out[:4, i] = (cx, cy, w, h)
+        out[4 + cls, i] = score
+    return out
+
+
+def boxes_lib_categories() -> tuple[str, ...]:
+    return boxes.CATEGORIES
+
+
+def test_nms_keeps_the_best_of_overlapping_boxes_of_one_class() -> None:
+    _, frame = detect_onnx.letterbox(np.zeros((320, 320, 3), np.uint8), SIZE)
+    raw = _raw(
+        (100, 100, 50, 50, 1, 0.9),
+        (102, 101, 50, 50, 1, 0.6),  # the same door again: suppressed
+        (102, 101, 50, 50, 3, 0.5),  # a person there: another class, kept
+        (250, 250, 40, 40, 1, 0.7),  # another door, far away: kept
+    )
+    found = detect_onnx.decode_yolo_raw(raw, frame, min_score=0.001)
+    assert [(d.category, round(d.score, 2)) for d in found] == [
+        ("door", 0.9),
+        ("door", 0.7),
+        ("person", 0.5),
+    ]
+    assert (found[0].x, found[0].y, found[0].w, found[0].h) == pytest.approx(
+        (75, 75, 50, 50)
+    )
+
+
+def test_raw_boxes_map_back_through_the_letterbox() -> None:
+    _, frame = detect_onnx.letterbox(np.zeros((240, 320, 3), np.uint8), SIZE)
+    # 40 px of grey on top: a box centred at letterboxed (160, 160) is at
+    # photo (160, 120).
+    (d,) = detect_onnx.decode_yolo_raw(
+        _raw((160, 160, 20, 20, 0, 0.8)), frame, min_score=0.5
+    )
+    assert (d.x + d.w / 2, d.y + d.h / 2) == pytest.approx((160, 120))
+
+
+def test_both_yolo_layouts_are_told_apart_by_shape() -> None:
+    _, frame = detect_onnx.letterbox(np.zeros((320, 320, 3), np.uint8), SIZE)
+    raw = detect_onnx.yolo_detections(
+        _raw((100, 100, 50, 50, 1, 0.9))[None], frame
+    )
+    end2end = detect_onnx.yolo_detections(
+        np.array([[[75, 75, 125, 125, 0.9, 1]]], np.float32), frame
+    )
+    assert [(d.category, d.x) for d in raw] == [("door", pytest.approx(75))]
+    assert [(d.category, d.x) for d in end2end] == [("door", pytest.approx(75))]

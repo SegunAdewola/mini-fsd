@@ -349,7 +349,7 @@ def test_the_rf_detr_candidate_decodes_as_detr(
 
     class Fake:
         def __init__(
-            self, path: pathlib.Path, threads: int, kind: str = "end2end"
+            self, path: pathlib.Path, threads: int, kind: str = "yolo"
         ) -> None:
             opened.append((path, threads, kind))
 

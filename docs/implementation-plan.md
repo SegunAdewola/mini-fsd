@@ -913,3 +913,16 @@ Add a row at the end of each session.
   ms, same architecture; an upload was running), so the report takes latency
   only from `runs/harness/latency.jsonl`, the clean cool-session runs
   (`--latency-log`); accuracy still comes from the latest run.
+- **2026-11-26** Explorer runs. E1a YOLO26n: 40 epochs in 526 s on a V100 (13 s
+  an epoch, images cached in RAM, 8 loaders). The export kept YOLO's raw head,
+  (1, 8, 2100), not the end-to-end (1, 300, 6) the decoder assumed; the
+  real-model test caught it, and `detect_onnx` now reads either layout by shape,
+  with class-aware NMS at IoU 0.7 as in Ultralytics' validation. mAP@0.5 on v10
+  val 0.933 (door 0.957, obstacle 0.897, sign 0.945); on COCO people val 0.406
+  (person 0.655, obstacle 0.158: COCO's furniture looks little like v10's).
+  Latency about 26 to 29 ms p50 on the M1 (not yet a clean session), inside the
+  50 ms budget. E3a DA3-Small: 1,454 depth maps in 2.5 min on a V100. NYUv2 test
+  AbsRel 0.078 / delta1 0.933 per-image fit, 0.262 / 0.527 global fit, against
+  V5's V2-Small 0.062 / 0.955 and 0.242 / 0.564: the newer model is slightly
+  worse zero-shot here. nyuv2-val 0.078 / 0.930 and 0.258 / 0.505; v9 val 0.136
+  / 0.811 and 0.419 / 0.475.

@@ -11,7 +11,10 @@ what Ultralytics trains with.
 Output: an end-to-end export, which needs no non-maximum suppression: one
 (1, N, 6) tensor, each row x1, y1, x2, y2 in letterboxed pixels, a score
 and a class index into minifsd.data.boxes.CATEGORIES. YOLO26 exports this
-way by default; the first real export confirms it.
+way by default; the first real export confirms it. It didn't (2026-11-26):
+E1a's export kept YOLO's raw head, (1, 4 + C, N) columns of centre x,
+centre y, width, height and per-class scores, which needs non-maximum
+suppression. yolo_detections reads either layout, told apart by shape.
 
 RF-DETR (E1b) differs, as read from rfdetr 1.12.1's own export code: the
 photo is stretched to the square (no letterbox), bilinear, ImageNet
@@ -38,7 +41,9 @@ PAD_VALUE = 114  # Ultralytics' letterbox grey
 IMAGENET_MEAN = (0.485, 0.456, 0.406)  # RF-DETR's input normalisation
 IMAGENET_STD = (0.229, 0.224, 0.225)
 DETR_SELECT = 300  # query and class pairs kept, RF-DETR's num_select
-KINDS = ("end2end", "detr")
+NMS_IOU = 0.7  # Ultralytics' validation settings, so its mAP and ours agree
+MAX_DETECTIONS = 300
+KINDS = ("yolo", "detr")
 MIN_SCORE = 0.001  # keep nearly everything: mAP needs the low-score tail
 ROW_WIDTH = 6
 
@@ -116,6 +121,71 @@ def to_detections(
     return found
 
 
+def nms(xyxy: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:
+    """Greedy non-maximum suppression; indices kept, best first."""
+    x1, y1, x2, y2 = xyxy.T
+    areas = np.maximum(x2 - x1, 0) * np.maximum(y2 - y1, 0)
+    order = np.argsort(-scores, kind="stable")
+    keep = []
+    while order.size:
+        i, rest = order[0], order[1:]
+        keep.append(int(i))
+        w = np.minimum(x2[i], x2[rest]) - np.maximum(x1[i], x1[rest])
+        h = np.minimum(y2[i], y2[rest]) - np.maximum(y1[i], y1[rest])
+        inter = np.maximum(w, 0) * np.maximum(h, 0)
+        overlap = inter / np.maximum(areas[i] + areas[rest] - inter, 1e-9)
+        order = rest[overlap <= iou]
+    return keep
+
+
+def decode_yolo_raw(
+    raw: np.ndarray,
+    frame: Frame,
+    min_score: float = MIN_SCORE,
+    iou: float = NMS_IOU,
+    max_detections: int = MAX_DETECTIONS,
+) -> list[detection.Detection]:
+    """YOLO's raw head for one image to boxes in the photo's pixels.
+
+    Each column's best class is its label, as in Ultralytics; boxes of one
+    class that overlap by more than iou keep only the best.
+
+    Args:
+        raw: (4 + C, N): centre x, centre y, width, height in letterboxed
+            pixels, then C class scores (already through the sigmoid).
+        frame: From letterbox().
+        min_score: Columns scoring below this are dropped first.
+        iou: Overlap above which a lower-scored box of the same class goes.
+        max_detections: At most this many boxes.
+    """
+    cls = np.argmax(raw[4:], axis=0)
+    scores = raw[4:][cls, np.arange(raw.shape[1])]
+    keep = scores >= min_score
+    cx, cy, w, h = raw[:4, keep].astype(np.float64)
+    cls, scores = cls[keep], scores[keep].astype(np.float64)
+    xyxy = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1)
+    # One NMS for all classes: shift each class far from the others.
+    shifted = xyxy + (cls * 10_000.0)[:, None]
+    chosen = nms(shifted, scores, iou)[:max_detections]
+    rows = np.concatenate(
+        [xyxy[chosen], scores[chosen, None], cls[chosen, None]], axis=1
+    )
+    return to_detections(rows, frame, min_score)
+
+
+def yolo_detections(
+    output: np.ndarray, frame: Frame
+) -> list[detection.Detection]:
+    """Either YOLO export layout, told apart by shape, to photo boxes.
+
+    (1, N, 6) is end to end (rows of box, score, class); (1, 4 + C, N) is
+    the raw head, decoded with NMS.
+    """
+    if output.ndim == 3 and output.shape[2] == ROW_WIDTH:
+        return to_detections(output[0], frame)
+    return decode_yolo_raw(output[0], frame)
+
+
 def stretch(rgb: np.ndarray, size: int) -> np.ndarray:
     """A photo resized to size x size, ImageNet-normalised, for RF-DETR."""
     resized = cv2.resize(rgb, (size, size), interpolation=cv2.INTER_LINEAR)
@@ -182,7 +252,7 @@ class OnnxDetector:
         self,
         path: pathlib.Path,
         threads: int,
-        kind: str = "end2end",
+        kind: str = "yolo",
         size: int | None = None,
     ) -> None:
         """Opens the model on the CPU.
@@ -190,8 +260,8 @@ class OnnxDetector:
         Args:
             path: The .onnx file.
             threads: ONNX Runtime's thread cap (the harness's budget).
-            kind: "end2end" (YOLO26) or "detr" (RF-DETR); see the module
-                docstring.
+            kind: "yolo" (either YOLO export layout) or "detr" (RF-DETR);
+                see the module docstring.
             size: Input side in pixels; read from the model if None.
 
         Raises:
@@ -215,10 +285,10 @@ class OnnxDetector:
 
     def predict(self, rgb: np.ndarray) -> list[detection.Detection]:
         """(H, W, 3) uint8 RGB to detections in its pixels."""
-        if self.kind == "end2end":
+        if self.kind == "yolo":
             x, frame = letterbox(rgb, self.size)
-            (rows, *_) = self._session.run(None, {self._input: x})
-            return to_detections(np.asarray(rows)[0], frame)
+            (output, *_) = self._session.run(None, {self._input: x})
+            return yolo_detections(np.asarray(output), frame)
         named = dict(
             zip(
                 self._outputs,
