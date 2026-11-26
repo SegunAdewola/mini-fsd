@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cyclone DDS (the ROS 2 transport) on this machine only, over loopback.
+
+  ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST limits which nodes find each other,
+  but Cyclone still sends from the Wi-Fi address. When that network changes or
+  drops, the nodes stop hearing each other mid-run (M4.8, 2026-11-26: a phone
+  hotspot went away and seed 0's missions failed). lo0 always exists, so pin
+  Cyclone to it. pixi.toml points CYCLONEDDS_URI here.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="lo0"/>
+      </Interfaces>
+      <!-- macOS doesn't route multicast on loopback: find peers by unicast. -->
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+        <Peer address="127.0.0.1"/>
+      </Peers>
+      <!-- Unicast discovery probes one port per participant index. The
+           default of 9 is too few for Nav2's dozen nodes plus tests. -->
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>64</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

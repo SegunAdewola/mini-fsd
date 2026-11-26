@@ -25,6 +25,9 @@ platforms = [{ name = "osx-arm64-14", platform = "osx-arm64", macos = "14.0" }]
 [activation.env]
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 ROS_AUTOMATIC_DISCOVERY_RANGE = "LOCALHOST"
+# Cyclone on loopback only, so a Wi-Fi change can't cut nodes off mid-run
+# (see the file for why; M4.8).
+CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/ros2_ws/cyclonedds.xml"
 
 [dependencies]
 python = "3.12.*"
