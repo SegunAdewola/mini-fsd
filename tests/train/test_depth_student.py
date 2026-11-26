@@ -49,6 +49,23 @@ def test_the_loss_ignores_any_scale_and_shift(
     )
 
 
+@settings(deadline=None, max_examples=20)
+@given(st.floats(-20.0, -0.05), st.floats(-3.0, 3.0))
+def test_an_inverted_map_scores_worse_than_a_flat_one(
+    scale: float, shift: float
+) -> None:
+    # Disparity has a sign: larger is closer. A flat map says nothing; an
+    # inverted one says the opposite of the truth, so it must lose to flat.
+    gen = torch.Generator().manual_seed(0)
+    target = torch.rand(2, 12, 16, generator=gen) + 0.1
+    valid = torch.ones(2, 12, 16, dtype=torch.bool)
+    inverted = (target * scale + shift).unsqueeze(1)
+    flat = torch.full_like(inverted, 0.5)
+    assert float(ds.ssi_loss(inverted, target, valid)) > float(
+        ds.ssi_loss(flat, target, valid)
+    )
+
+
 def test_the_loss_skips_invalid_pixels() -> None:
     target = torch.full((1, 4, 4), 0.5)
     valid = torch.ones(1, 4, 4, dtype=torch.bool)

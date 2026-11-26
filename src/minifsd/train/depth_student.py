@@ -16,8 +16,10 @@ human depth label on any real one:
   teacher. `teach` runs it once and saves image and disparity pairs.
 
 Neither target shares a scale with the other or with metres, so the loss is
-MiDaS's scale-and-shift invariant one: each prediction is aligned to its
-target by least squares, then the mean absolute error is taken. The
+MiDaS's scale-and-shift invariant one: prediction and target are each shifted
+by their median and divided by their mean absolute deviation, then the mean
+absolute error is taken. That keeps disparity's sign; a least-squares align
+did not, and the first student came out inverted (plan log, 2026-11-26). The
 teacher's 495 images are repeated so they make half of each epoch.
 """
 
@@ -47,6 +49,18 @@ LABELS = {0: "disparity"}
 Item = dict[str, torch.Tensor]
 
 
+def _normalise(x: torch.Tensor) -> torch.Tensor:
+    """MiDaS's alignment: shift by the median, scale by the mean deviation.
+
+    Both statistics follow a positive scale and any shift of x, so the loss
+    can't see them. A negative scale moves the values to the other side of
+    the median, so an inverted map stays inverted and is penalised; a
+    least-squares fit would flip it back for free. A flat map becomes zeros.
+    """
+    centred = x - x.median()
+    return centred / centred.abs().mean().clamp_min(1e-6)
+
+
 def ssi_loss(
     pred: torch.Tensor, target: torch.Tensor, valid: torch.Tensor
 ) -> torch.Tensor:
@@ -67,15 +81,7 @@ def ssi_loss(
         if int(keep.sum()) < 2:
             continue
         p, y = pred[i, 0][keep], target[i][keep]
-        n = p.numel()
-        sp, sy = p.sum(), y.sum()
-        det = n * (p * p).sum() - sp * sp
-        if float(det.detach().abs()) < 1e-9:  # a flat prediction: no fit
-            losses.append((y - y.mean()).abs().mean())
-            continue
-        s = (n * (p * y).sum() - sp * sy) / det
-        t = (sy - s * sp) / n
-        losses.append((s * p + t - y).abs().mean())
+        losses.append((_normalise(p) - _normalise(y)).abs().mean())
     if not losses:
         return pred.sum() * 0.0
     return torch.stack(losses).mean()
