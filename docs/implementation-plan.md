@@ -948,3 +948,15 @@ Add a row at the end of each session.
   naming code's default suggested, so a resubmitted E1b would have retrained;
   `rf_detr.train` now takes the name `export()` returns and treats any `.onnx`
   in the run folder as done.
+- **2026-11-26** E4 trained on Explorer: 12 epochs, 32 s each on a V100 (the
+  frozen backbone keeps it cheap). HydraNet-lite heads against the specialists.
+  Floor, nyuv2-val IoU 0.499 (precision 0.63, recall 0.70) against DINOv2 v10's
+  0.516; v10 val 0.953 against 0.952. Boxes, mAP@0.5 on v10 val 0.646 against
+  YOLO26n 0.933 and RF-DETR 0.962; COCO people val 0.288 (person 0.452) against
+  0.406 and 0.621. Depth, nyuv2-val AbsRel 0.180 / delta1 0.706 per-image fit
+  and 0.299 / 0.457 global, against V2-Small's 0.062 / 0.957 and 0.234 / 0.573.
+  So one frozen backbone serves floor at almost no cost, but a light head on
+  frozen 14 px patch features is far behind dedicated detectors and depth
+  models. Latency (hydra-all against the sum of specialists) waits for the clean
+  session. RF-DETR Nano scored: v10 val mAP 0.962, COCO people val 0.621 (person
+  0.806, obstacle 0.437), about 245 ms p50, 9 times YOLO's.
