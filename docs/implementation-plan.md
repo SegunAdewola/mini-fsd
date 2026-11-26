@@ -335,12 +335,13 @@ rule holds: 2 candidates per experiment.
   and unpack round trip keeps every file byte for byte; a training module's
   smoke run on 20 images on CPU (the `cv` environment) writes a checkpoint and
   resumes from it.
-- [ ] T3 `[CV]` feat(train): dataset adapters from v9 and COCO people to each
+- [x] T3 `[CV]` feat(train): dataset adapters from v9 and COCO people to each
   trainer's format: YOLO txt labels, RF-DETR's COCO folders, and floor-mask
-  pairs for segmentation. Decide before starting how COCO images avoid teaching
-  that real furniture is background (see open follow-ups). Test: a box survives
-  the round trip to each format and back to pixels; every image keeps its
-  labels; class ids match `boxes.CATEGORIES`.
+  pairs for segmentation. Furniture on COCO images is labeled obstacle (D10,
+  option a); unlabeled doors and signs on COCO images are settled at E1a, since
+  the adapters are the same either way. Test: a box survives the round trip to
+  each format and back to pixels; every image keeps its labels; class ids match
+  `boxes.CATEGORIES`.
 - [ ] E2a `[CV]` exp: SegFormer-B0 (ImageNet-pretrained, Hugging Face) for floor
   segmentation on v9 train. Score floor IoU on v9 val and the NYUv2 val subset,
   and latency at the camera's size, through the harness. Test: the harness
@@ -352,7 +353,9 @@ rule holds: 2 candidates per experiment.
   that foundation features cross the sim-to-real gap better.
 - [ ] E1a `[CV]` exp: YOLO26n fine-tuned on v9 train plus COCO people, scored by
   T1's mAP on v9 val and COCO people val, plus latency. Check the AGPL question
-  (open follow-ups) before the weights go in the repo or the demo.
+  (open follow-ups) before the weights go in the repo or the demo. Decide first
+  how COCO images, which have doors and signs nobody labeled, avoid teaching
+  that a real door is background.
 - [ ] E1b `[CV]` exp: RF-DETR Nano, same data and scoring.
 - [ ] E3a `[CV]` exp: Depth Anything 3 Small zero-shot through the harness, on
   NYUv2 test and v9 val, next to V5's Depth Anything V2 Small numbers, with the
@@ -691,3 +694,10 @@ Add a row at the end of each session.
 - **2026-11-25** Training moves from Explorer to Colab's free tier (ADR 0007):
   no time to set up the cluster before the report. Data on Google Drive as zips,
   code in `src/minifsd/train`, thin notebook, checkpoints to Drive every epoch.
+- **2026-11-25** T3 adapters in `minifsd.train.adapters`: YOLO folders (images
+  symlinked, one txt per image, crowd regions dropped), RF-DETR's COCO folders
+  (ids renumbered, crowd regions kept), floor (rgb, mask) pairs. Building the
+  YOLO set from v9 and COCO people takes about 6 s (14,000 train, 1,000 val).
+  `data.yaml` is written as JSON, which YAML reads, so no YAML dependency. The
+  question of unlabeled doors and signs on COCO images moved to E1a: it changes
+  how the detector trains, not the adapters.
