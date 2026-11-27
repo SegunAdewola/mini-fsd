@@ -85,3 +85,42 @@ def test_the_runtime_module_loads_without_torch() -> None:
         "assert 'torch' not in sys.modules, 'imports torch'"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def _agree(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.corrcoef(a.ravel(), b.ravel())[0, 1])
+
+
+@needs_export
+def test_an_int8_floor_model_is_quantized_and_stays_close_to_fp32(
+    tmp_path: pathlib.Path,
+) -> None:
+    import onnx
+
+    torch.manual_seed(0)
+    train_dino.build_model(None).eval().save(tmp_path / "floor")
+    fp32 = onnx_export.export_floor(tmp_path / "floor", tmp_path / "f.onnx")
+    int8 = onnx_export.quantize(fp32, tmp_path / "f-int8.onnx")
+    # A tiny model can come out larger (the added scales outweigh its few
+    # weights), so check the graph: integer products, quantized on the fly.
+    ops = {node.op_type for node in onnx.load(str(int8)).graph.node}
+    assert "DynamicQuantizeLinear" in ops
+    assert ops & {"MatMulInteger", "ConvInteger"}
+    a = onnx_models.OnnxFloor(fp32, threads=1)
+    b = onnx_models.OnnxFloor(int8, threads=1)
+    rgb = _photo(0)
+    assert _agree(a.logits(rgb), b.logits(rgb)) > 0.98
+
+
+@needs_export
+def test_an_int8_depth_model_stays_close_to_fp32(
+    tmp_path: pathlib.Path,
+) -> None:
+    torch.manual_seed(0)
+    train_student.build_model(None).save_pretrained(tmp_path / "depth")
+    fp32 = onnx_export.export_depth(tmp_path / "depth", tmp_path / "d.onnx")
+    int8 = onnx_export.quantize(fp32, tmp_path / "d-int8.onnx")
+    rgb = _photo(1)
+    a = onnx_models.OnnxDepth(fp32, threads=1).predict(rgb)
+    b = onnx_models.OnnxDepth(int8, threads=1).predict(rgb)
+    assert _agree(a, b) > 0.98
