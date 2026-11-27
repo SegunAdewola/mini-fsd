@@ -27,6 +27,7 @@ its consequences and the alternatives that were rejected.
 - [0006 License the repo under Apache-2.0](decisions/0006-apache-2-license.md)
 - [0007 Train on Colab's free tier, not Explorer, for now](decisions/0007-train-on-colab.md)
 - [0008 Train YOLO26n with Ultralytics, keep the repo Apache-2.0](decisions/0008-ultralytics-agpl.md)
+- [0009 Model the compute budgets with thread caps, not Docker](decisions/0009-thread-cap-budget-profiles.md)
 
 ## Learning
 

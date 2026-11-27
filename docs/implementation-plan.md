@@ -562,8 +562,19 @@ scale and shift on the pixels the floor model marks.
 
 ## M5 Edge and safety
 
-Steps written at the end of M4. E6 FP32 vs FP16 vs INT8 (ONNX Runtime CPU) under
-the budget profiles; speed vs latency sweep; sign reading; safety monitor.
+Steps written 2026-11-26 at the end of M4. The picked stack takes about 262 ms
+in ONNX Runtime (floor 225, boxes 21, depth 16) against a 50 ms budget, so E6 is
+mostly about the DINOv2 floor model. M4.8 showed where camera-only depth fails:
+up close, a large box came out 23 cm too far and the detector lost it. A safety
+stop that trusts the same depth would be fooled the same way, so the monitor
+reads the floor mask instead: the camera's pose fixes which pixels show the
+floor in the robot's path, and if they aren't floor, something is there.
+
+Cut or shrunk to protect the report and the photos (decided 2026-11-26): the
+Docker budget profiles become thread caps (ADR 0009); the speed-vs-latency sweep
+is a stretch, only if S3 is done by about Dec 3; sign reading (OCR) and fault
+injection are cut, since goals come from the map and S1's staleness check covers
+the main fault.
 
 E6 also gets a sustained run. The comparison tables time each candidate on a
 cool, idle M1 (`scripts/latency.sh`), so the order of runs can't decide the
@@ -571,6 +582,33 @@ ranking. The robot runs hot: the picked stack (floor, boxes, depth) runs for 10
 minutes without a break on the sim camera, p50 is logged each minute, and the
 report gives the settled value next to the cool one. The 50 ms budget is checked
 against the settled value.
+
+- [x] E6.1 `[CV]` feat(perception): INT8 versions of the floor, depth and box
+  models with ONNX Runtime's `quantize_dynamic`, made offline in the `cv` env
+  (no new dependency). Test: on a tiny exported model the INT8 file loads and
+  its output stays close to FP32's; on the real models, INT8 floor masks agree
+  with FP32 on at least 98% of nyuv2-val pixels.
+- [ ] E6.2 `[CV]` feat(eval): harness candidates for each variant, FP32 and INT8
+  on the CPU and through CoreML (FP16 only means something there: ONNX Runtime's
+  ARM CPU kernels don't speed it up), and thread caps of 1, 2 and 4. Test: each
+  candidate loads and returns its task's output.
+- [ ] E6.3 `[CV]` exp: accuracy and latency of every variant in one cool
+  `latency.sh` session; per model, keep the fastest variant that loses at most
+  0.01 of its metric. Report the stack's latency at each thread cap.
+- [ ] E6.4 `[CV]` exp: the sustained run on the kept variants.
+- [ ] S1 `[R]` feat(safety): `minifsd.safety`, ROS-free. The robot's path over
+  its stopping distance (v times the perception latency, plus v^2 / 2a, plus a
+  margin), as wide as the robot, projected into the image (M4.1); if too little
+  of it is marked floor, forward speed goes to 0 while turning stays allowed. A
+  frame older than about 0.5 s also stops forward motion. Test: never allows
+  forward motion when the path pixels aren't floor; always allows it on clear
+  floor; turning in place is always allowed; stale perception stops (all
+  properties where they can be).
+- [ ] S2 `[R]` feat(safety): `safety_monitor` node between Nav2 and the sim,
+  with Nav2's cmd_vel remapped through it; logs and counts stops. Test: ROS
+  smoke test, a blocked view stops a forward command and a clear one passes.
+- [ ] S3 `[R]` exp: M4.8's model condition again with the monitor; success,
+  collisions and stops against M4.8.
 
 ## M6 Report and demo
 
@@ -1170,3 +1208,14 @@ Add a row at the end of each session.
   clears the correct marks along the new, too-long rays, so the box seems to
   recede as the robot nears. Remedy for M5: a close-range safety stop that
   doesn't trust the costmap.
+- **2026-11-26** E6.1: `onnx_export.quantize` (ONNX Runtime's pre-processing,
+  then `quantize_dynamic`, INT8 weights) and `onnx_export int8 IN OUT`. On a
+  tiny test model the INT8 file came out larger (its scales outweigh its few
+  weights), so the test checks the graph for integer products instead of the
+  size. Real models (rough timings, not a clean session): DINOv2 floor 218 to
+  110 ms and 89 to 23 MB, masks agreeing with FP32 on 98.4% of nyuv2-val pixels
+  (worst photo 94.5%); depth student 16 to 15 ms, correlation 0.9986; YOLO26n 21
+  to 18 ms. Dynamic INT8 speeds up matrix products, which a ViT is mostly made
+  of, and does little for small convolutional nets. The stack falls from about
+  255 to about 143 ms, still near three times the budget; torch with Apple
+  Accelerate ran the floor model in 72 ms, so CoreML (E6.2) is the next chance.
